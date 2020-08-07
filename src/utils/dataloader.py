@@ -29,7 +29,7 @@ class DataSet(torch.utils.data.Dataset):
         self.his_size = config['his_size']
         self.npratio = config['npratio']
         self.nid2idx, self.news_title_index = self.init_news(news_file)
-        self.histories, self.imprs, self.labels, self.impr_idxs, self.uidxs = \
+        self.histories, self.imprs, self.labels, self.raw_impr_idxs, self.impr_idxs, self.uidxs = \
             self.init_behaviors(behaviors_file)
 
     def __getitem__(self, idx):
@@ -85,6 +85,7 @@ class DataSet(torch.utils.data.Dataset):
             impr_indexes: index of the behavior
             uindexes: index of users
         """
+        raw_impr_indexes = []
         histories = []
         imprs = []
         labels = []
@@ -94,8 +95,8 @@ class DataSet(torch.utils.data.Dataset):
         with open(behaviors_file, 'r') as rd:
             impr_index = 0
             for line in rd:
-                uid, time, history, impr = line.strip("\n").split(
-                    self.col_spliter)[-4:]
+                raw_impr_id, uid, time, history, impr = line.strip("\n").split(
+                    self.col_spliter)[-5:]
 
                 history = [self.nid2idx[i] for i in history.split()]
                 # padding
@@ -108,11 +109,12 @@ class DataSet(torch.utils.data.Dataset):
                 histories.append(history)
                 imprs.append(impr_news)
                 labels.append(label)
+                raw_impr_indexes.append(raw_impr_id)
                 impr_indexes.append(impr_index)
                 uindexes.append(uindex)
                 impr_index += 1
 
-        return histories, imprs, labels, impr_indexes, uindexes
+        return histories, imprs, labels, raw_impr_indexes, impr_indexes, uindexes
 
 
 class DataSetTrn(DataSet):
