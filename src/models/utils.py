@@ -108,6 +108,3 @@ class SelfAttn(nn.Module):
             output = output.transpose(1, 2)
             output = output.reshape(-1, output.shape[1], self.multihead_dim)
             return output
-
-
-

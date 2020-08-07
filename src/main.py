@@ -50,13 +50,13 @@ def set_seed(seed):
 @click.option('--out', type=str, default='../out')
 def main(data, out):
     # paths
-    trn_data = os.path.join(data, 'MINDdemo_train')
-    vld_data = os.path.join(data, 'MINDdemo_dev')
+    trn_data = os.path.join(data, 'MINDlarge_train')
+    vld_data = os.path.join(data, 'MINDlarge_dev')
     util_data = os.path.join(data, 'utils')
     trn_paths = set_paths(trn_data)
     vld_paths = set_paths(vld_data)
     util_paths = set_utils(util_data)
-    out_path = os.path.join(out, 'MINDdemo_dev')
+    out_path = os.path.join(out, 'MINDlarge_dev')
     os.makedirs(out_path, exist_ok=True)
 
     # read configuration file
