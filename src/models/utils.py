@@ -35,13 +35,9 @@ class LinearAttn(nn.Module):
 class SelfAttn(nn.Module):
     def __init__(self, head_num, head_dim, input_dim, mask_right=False):
         """Initialization for variables in SelfAttention.
-        There are three variables in SelfAttention, i.e. WQ, WK ans WV.
         WQ is used for linear transformation of query.
         WK is used for linear transformation of key.
         WV is used for linear transformation of value.
-
-        Args:
-            input_shape (obj): shape of input tensor.
         """
         super(SelfAttn, self).__init__()
         self.head_num = head_num
