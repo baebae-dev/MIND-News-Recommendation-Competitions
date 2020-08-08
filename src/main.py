@@ -49,7 +49,8 @@ def set_seed(seed):
 @click.option('--data', type=str, default='large')
 @click.option('--out_path', type=str, default='../out')
 @click.option('--config_path', type=str, default='./config.yaml')
-def main(data_path, data, out_path, config_path):
+@click.option('--eval_every', type=int, default=3)
+def main(data_path, data, out_path, config_path, eval_every):
     # paths
     trn_data = os.path.join(data_path, f'MIND{data}_train')
     vld_data = os.path.join(data_path, f'MIND{data}_dev')
@@ -57,7 +58,7 @@ def main(data_path, data, out_path, config_path):
     trn_paths = set_data_paths(trn_data)
     vld_paths = set_data_paths(vld_data)
     util_paths = set_util_paths(util_data)
-    out_path = os.path.join(out_path, f'MIND{data}_dev')
+    out_path = os.path.join(out_path, f'MIND{data}_dev_{eval_every}')
     os.makedirs(out_path, exist_ok=True)
 
     # read configuration file
@@ -125,6 +126,13 @@ def main(data_path, data, out_path, config_path):
             batch_loss += loss.item()
 
         inter_time = time.time()
+        epoch_loss = batch_loss/(i+1)
+
+        if epoch % eval_every != 0:
+            result = f'Epoch {epoch:3d} [{inter_time - start_time:5.2f}Sec]' \
+                     f', TrnLoss:{epoch_loss:.4f}'
+            print(result)
+            continue
 
         '''
         evaluation
@@ -162,12 +170,10 @@ def main(data_path, data, out_path, config_path):
         for metric, _ in metrics.items():
             metrics[metric] /= len(vld_impr)
 
-        epoch_loss = batch_loss/(i+1)
         end_time = time.time()
 
-        result = f'Epoch {epoch:3d} [{inter_time-start_time:5.2f}/{end_time-start_time:5.2f}Sec]' \
-                 f', TrnLoss:{epoch_loss:.4f}'
-        result += ', '
+        result = f'Epoch {epoch:3d} [{inter_time - start_time:5.2f} / {end_time - inter_time:5.2f}Sec]' \
+                 f', TrnLoss:{epoch_loss:.4f}, '
         for enum, (metric, _) in enumerate(metrics.items(), start=1):
             result += f'{metric}:{metrics[metric]:.4f}'
             if enum < len(metrics):
