@@ -46,17 +46,18 @@ def set_seed(seed):
 
 
 @click.command()
-@click.option('--data', type=str, default='/data/mind')
+@click.option('--data_path', type=str, default='/data/mind')
+@click.option('--data', type=str, default='demo')
 @click.option('--out', type=str, default='../out')
-def main(data, out):
+def main(data_path, data, out):
     # paths
-    trn_data = os.path.join(data, 'MINDlarge_train')
-    vld_data = os.path.join(data, 'MINDlarge_dev')
-    util_data = os.path.join(data, 'utils')
+    trn_data = os.path.join(data_path, f'MIND{data}_train')
+    vld_data = os.path.join(data_path, f'MIND{data}_dev')
+    util_data = os.path.join(data_path, 'utils')
     trn_paths = set_paths(trn_data)
     vld_paths = set_paths(vld_data)
     util_paths = set_utils(util_data)
-    out_path = os.path.join(out, 'MINDlarge_dev')
+    out_path = os.path.join(out, f'MIND{data}_dev')
     os.makedirs(out_path, exist_ok=True)
 
     # read configuration file
@@ -123,6 +124,8 @@ def main(data, out):
             optimizer.step()
             batch_loss += loss.item()
 
+        inter_time = time.time()
+
         '''
         evaluation
         '''
@@ -135,11 +138,12 @@ def main(data, out):
                 vld_cand_out_j = model(vld_cand_j, source='candidate')
 
                 scores_j = torch.matmul(vld_cand_out_j, vld_his_out_j.unsqueeze(2)).squeeze()
-                sorted_j = torch.sort(scores_j, descending=True)[1] + 1
                 scores_j = scores_j.detach().cpu().numpy()
-                sorted_j = list(sorted_j.detach().cpu().numpy())
-                sorted_idx = ','.join([str(s) for s in sorted_j])
-                f.write(f'{impr_idx_j} [{sorted_idx}]\n')
+                argmax_idx = (-scores_j).argsort()
+                ranks = np.empty_like(argmax_idx)
+                ranks[argmax_idx] = np.arange(1, scores_j.shape[0]+1)
+                ranks_str = ','.join([str(r) for r in list(ranks)])
+                f.write(f'{impr_idx_j} [{ranks_str}]\n')
 
                 vld_gt_j = np.array(vld_label[j])
 
@@ -161,7 +165,8 @@ def main(data, out):
         epoch_loss = batch_loss/(i+1)
         end_time = time.time()
 
-        result = f'Epoch {epoch:3d} [{end_time-start_time:5.2f}], TrnLoss:{epoch_loss:.4f}'
+        result = f'Epoch {epoch:3d} [{inter_time-start_time:5.2f}/{end_time-start_time:5.2f}Sec]' \
+                 f', TrnLoss:{epoch_loss:.4f}'
         result += ', '
         for enum, (metric, _) in enumerate(metrics.items(), start=1):
             result += f'{metric}:{metrics[metric]:.4f}'
