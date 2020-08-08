@@ -19,19 +19,18 @@ from sklearn.metrics import roc_auc_score
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def set_paths(data):
-    paths = {'behaviors': os.path.join(data, 'behaviors.tsv'),
-             'news': os.path.join(data, 'news.tsv'),
-             'entity': os.path.join(data, 'entity_embedding.vec'),
-             'relation': os.path.join(data, 'relation_embedding.vec')}
+def set_data_paths(path):
+    paths = {'behaviors': os.path.join(path, 'behaviors.tsv'),
+             'news': os.path.join(path, 'news.tsv'),
+             'entity': os.path.join(path, 'entity_embedding.vec'),
+             'relation': os.path.join(path, 'relation_embedding.vec')}
     return paths
 
 
-def set_utils(data):
-    paths = {'embedding': os.path.join(data, 'embedding.npy'),
-             'uid2index': os.path.join(data, 'uid2index.pkl'),
-             'word_dict': os.path.join(data, 'word_dict.pkl'),
-             'config': os.path.join(data, 'nrms.yaml')}
+def set_util_paths(path):
+    paths = {'embedding': os.path.join(path, 'embedding.npy'),
+             'uid2index': os.path.join(path, 'uid2index.pkl'),
+             'word_dict': os.path.join(path, 'word_dict.pkl')}
     return paths
 
 
@@ -48,20 +47,21 @@ def set_seed(seed):
 @click.command()
 @click.option('--data_path', type=str, default='/data/mind')
 @click.option('--data', type=str, default='demo')
-@click.option('--out', type=str, default='../out')
-def main(data_path, data, out):
+@click.option('--out_path', type=str, default='../out')
+@click.option('--config_path', type=str, default='./config.yaml')
+def main(data_path, data, out_path, config_path):
     # paths
     trn_data = os.path.join(data_path, f'MIND{data}_train')
     vld_data = os.path.join(data_path, f'MIND{data}_dev')
     util_data = os.path.join(data_path, 'utils')
-    trn_paths = set_paths(trn_data)
-    vld_paths = set_paths(vld_data)
-    util_paths = set_utils(util_data)
-    out_path = os.path.join(out, f'MIND{data}_dev')
+    trn_paths = set_data_paths(trn_data)
+    vld_paths = set_data_paths(vld_data)
+    util_paths = set_util_paths(util_data)
+    out_path = os.path.join(out_path, f'MIND{data}_dev')
     os.makedirs(out_path, exist_ok=True)
 
     # read configuration file
-    config = prepare_config(util_paths['config'],
+    config = prepare_config(config_path,
                             wordEmb_file=util_paths['embedding'],
                             wordDict_file=util_paths['word_dict'],
                             userDict_file=util_paths['uid2index'])
