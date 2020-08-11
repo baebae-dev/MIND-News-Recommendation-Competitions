@@ -1,6 +1,8 @@
-import sys, os, os.path
-import numpy as np
 import json
+import os.path
+import sys
+
+import numpy as np
 from sklearn.metrics import roc_auc_score
 
 
