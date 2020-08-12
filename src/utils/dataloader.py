@@ -2,6 +2,7 @@ import torch
 import re
 import numpy as np
 from random import sample
+import tqdm
 
 
 def word_tokenize(sent):
@@ -53,7 +54,7 @@ class DataSet(torch.utils.data.Dataset):
         news_title = [""]
 
         with open(news_file, 'r') as rd:
-            for line in rd:
+            for line in tqdm.tqdm(rd):
                 nid, vert, subvert, title, ab, url, _, _ = line.strip("\n").split(self.col_spliter)
 
                 if nid in nid2index:
@@ -99,7 +100,7 @@ class DataSet(torch.utils.data.Dataset):
 
         with open(behaviors_file, 'r') as rd:
             impr_index = 0
-            for line in rd:
+            for line in tqdm.tqdm(rd):
                 raw_impr_id, uid, time, history, impr = line.strip("\n").split(
                     self.col_spliter)[-5:]
 

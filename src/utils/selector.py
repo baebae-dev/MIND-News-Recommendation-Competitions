@@ -1,6 +1,7 @@
 import os
 import pickle
 import pandas as pd
+import numpy as np
 
 
 class NewsSelector(object):
@@ -29,6 +30,7 @@ class NewsSelector(object):
         self.pop_hash_clicked = None # [key/ value] = [bucket index/ list of news]
         self.pop_hash_recommended = None # [key/ value] = [bucket index/ list of news]
         self.fresh_news_df = None # sorted list of news ids
+        self.sorted_dates = None
 
     def get_fresh(self, time):
         # input:  time - query time
@@ -39,8 +41,12 @@ class NewsSelector(object):
         if self.fresh_news_df is None:
             self.load_fresh_news_df()
         # get list of fresh news
-        _df = self.fresh_news_df[self.fresh_news_df['date'] <= self.parsing_behavior_time(time, return_type='int')]
-        res = _df.sort_values(by='date', ascending=False, inplace=False).iloc[0:self.num_fresh]
+        # _df = self.fresh_news_df[self.fresh_news_df['date'] <= self.parsing_behavior_time(time, return_type='int')]
+        # res = _df.sort_values(by='date', ascending=False, inplace=False).iloc[0:self.num_fresh]
+
+        query = self.parsing_behavior_time(time, return_type='int')
+        start_idx = self.sorted_dates.size - np.searchsorted(self.sorted_dates[::-1], query, side='right')
+        res = self.fresh_news_df.iloc[start_idx:start_idx+self.num_fresh]
 
         # print("query time: ", self.parsing_behavior_time(time, return_type='int'))
         # print("results:")
@@ -100,6 +106,8 @@ class NewsSelector(object):
                 self.fresh_news_df = pickle.load(f)
         else:
             self.generate_fresh_news_df()
+
+        self.sorted_dates = self.fresh_news_df['date'].to_numpy()
 
     def load_pop_hash_clicked(self):
         if os.path.isfile(self.pop_hash_clicked_file):

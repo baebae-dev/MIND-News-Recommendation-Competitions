@@ -6,6 +6,8 @@ import click
 import numpy as np
 import torch
 import torch.nn as nn
+import tqdm
+from sklearn.metrics import roc_auc_score
 from torch import optim
 from torch.utils.data import DataLoader
 
@@ -13,9 +15,7 @@ from models.nrms import NRMS
 from utils.config import prepare_config
 from utils.dataloader import DataSetTrn, DataSetTest
 from utils.evaluation import ndcg_score, mrr_score
-from sklearn.metrics import roc_auc_score
 from utils.selector import NewsSelector
-
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -52,6 +52,8 @@ def set_seed(seed):
 @click.option('--config_path', type=str, default='./config.yaml')
 @click.option('--eval_every', type=int, default=3)
 def main(data_path, data, out_path, config_path, eval_every):
+    start_time = time.time()
+
     # read paths
     trn_data = os.path.join(data_path, f'MIND{data}_train')
     vld_data = os.path.join(data_path, f'MIND{data}_dev')
@@ -110,6 +112,8 @@ def main(data_path, data, out_path, config_path, eval_every):
                            weight_decay=float(config['weight_decay']))
     criterion = nn.CrossEntropyLoss()
 
+    print(f'[{time.time()-start_time:5.2f} Sec] Prepared for training...')
+
     # train and evaluate
     for epoch in range(1, epochs+1):
         start_time = time.time()
@@ -117,7 +121,7 @@ def main(data_path, data, out_path, config_path, eval_every):
         '''
         training
         '''
-        for i, (trn_his, trn_pos, trn_neg, trn_pop, trn_fresh) in enumerate(trn_loader):
+        for i, (trn_his, trn_pos, trn_neg, trn_pop, trn_fresh) in tqdm.tqdm(enumerate(trn_loader)):
             # ready for training
             model.train()
             optimizer.zero_grad()
@@ -197,7 +201,7 @@ def main(data_path, data, out_path, config_path, eval_every):
 
         end_time = time.time()
 
-        result = f'Epoch {epoch:3d} [{inter_time - start_time:5.2f} / {end_time - inter_time:5.2f}Sec]' \
+        result = f'Epoch {epoch:3d} [{inter_time - start_time:5.2f} / {end_time - inter_time:5.2f} Sec]' \
                  f', TrnLoss:{epoch_loss:.4f}, '
         for enum, (metric, _) in enumerate(metrics.items(), start=1):
             result += f'{metric}:{metrics[metric]:.4f}'
