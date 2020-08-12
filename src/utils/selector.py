@@ -2,15 +2,18 @@ import os
 import pickle
 import pandas as pd
 
-class NewsRecommender:
+
+class NewsSelector(object):
     # popular bucket (clicked): [key/ value] = [bucket index/ list of news]
     # popular bucket (recommended): [key/ value] = [bucket index/ list of news]
     # sorted list of newses in order of time. (Only containing new keys)
 
-    def __init__(self, data_type1='large', data_type2='dev'):
+    def __init__(self, data_type1, data_type2, num_pop, num_fresh):
         # data_type1: 'demo', 'large'
         # data_type2: 'dev', 'train'
         self.bucket_size = 3 # size of buckets
+        self.num_pop = num_pop
+        self.num_fresh = num_fresh
 
         # Define file names
         self.data_path = '/data/mind/' + 'MIND' + data_type1 + '_' + data_type2 + '/'
@@ -27,8 +30,7 @@ class NewsRecommender:
         self.pop_hash_recommended = None # [key/ value] = [bucket index/ list of news]
         self.fresh_news_df = None # sorted list of news ids
 
-
-    def get_fresh_news(self, time, k):
+    def get_fresh(self, time):
         # input:  time - query time
         #         k - number of news
         # output: list of fresh news IDs
@@ -38,7 +40,7 @@ class NewsRecommender:
             self.load_fresh_news_df()
         # get list of fresh news
         _df = self.fresh_news_df[self.fresh_news_df['Date'] <= self.parsing_behavior_time(time, return_type='int')]
-        res = _df.sort_values(by='Date', ascending=False, inplace=False).iloc[0:k]
+        res = _df.sort_values(by='Date', ascending=False, inplace=False).iloc[0:self.num_fresh]
 
         # print("query time: ", self.parsing_behavior_time(time, return_type='int'))
         # print("results:")
@@ -46,21 +48,18 @@ class NewsRecommender:
         #     print(i, "--> query - i = ", self.parsing_behavior_time(time, return_type='int')-i )
         return res.iloc[:,1].values
 
-
-
-    def get_pop_news_clicked(self, time, k):
+    def get_pop_clicked(self, time):
         if self.pop_hash_clicked == None:
             self.load_pop_hash_clicked()
         ltime = self.parsing_behavior_time(time)
         bucket_key = (ltime[0], ltime[1], ltime[2], ltime[3]//self.bucket_size)
         sorted_news_list = sorted(self.pop_hash_clicked[bucket_key].items(),
                                   reverse=True, key=lambda item: item[1])
-        news_list = sorted_news_list[0:k]
+        news_list = sorted_news_list[0:self.num_pop]
         res = [ item[0] for item in news_list]
         return res
 
-
-    def get_pop_news_recommended(self, time, k):
+    def get_pop_recommended(self, time):
         if self.pop_hash_recommended == None:
             self.load_pop_hash_recommended()
         ltime = self.parsing_behavior_time(time)
@@ -87,7 +86,7 @@ class NewsRecommender:
 
         sorted_news_list = sorted(self.pop_hash_recommended[bucket_key].items(),
                                   reverse=True, key=lambda item: item[1])
-        news_list = sorted_news_list[0:k]
+        news_list = sorted_news_list[0:self.num_pop]
         res = [ item[0] for item in news_list]
         return res
 
@@ -210,11 +209,12 @@ class NewsRecommender:
         res = t1[0] + t1[1] + t1[2] + t2[0] + t2[1] + t2[2]
         return int(res)
 
+
 if __name__ == "__main__":
-    nr = NewsRecommender(data_type1 = 'large', data_type2 = 'dev')
-    ns1 = nr.get_pop_news_recommended('11/15/2019 8:55:22 AM', k=10)
-    ns2 = nr.get_pop_news_clicked('11/15/2019 8:55:22 AM', k=10)
-    ns3 = nr.get_fresh_news('11/15/2019 8:55:22 AM', k=10)
+    nr = NewsSelector(num_pop=10, num_fresh=10, data_type1 ='demo', data_type2 ='dev')
+    ns1 = nr.get_pop_recommended('11/15/2019 8:55:22 AM')
+    ns2 = nr.get_pop_clicked('11/15/2019 8:55:22 AM')
+    ns3 = nr.get_fresh('11/15/2019 8:55:22 AM')
     print(ns1)
     print(ns2)
     print(ns3)
