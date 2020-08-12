@@ -32,6 +32,27 @@ class LinearAttn(nn.Module):
         return output
 
 
+class GlobalAttn(nn.Module):
+    def __init__(self, his_dim, global_dim):
+        super(GlobalAttn, self).__init__()
+
+        # variables
+        self.W = nn.Linear(his_dim, global_dim, bias=False)
+
+        # initialize
+        self.W.apply(init_weights)
+
+    def forward(self, his, global_pref):
+        # his: [batch, len_seq, his_dim]
+        # global_pref: [batch, global_dim]
+        # attn: [batch, len_seq, 1]
+        attn = torch.matmul(self.W(his), global_pref.unsqueeze(2))
+        attn = F.softmax(attn, dim=-2)
+
+        output = torch.mul(his, attn).sum(-2)
+        return output
+
+
 class SelfAttn(nn.Module):
     def __init__(self, head_num, head_dim, input_dim, mask_right=False):
         """Initialization for variables in SelfAttention.

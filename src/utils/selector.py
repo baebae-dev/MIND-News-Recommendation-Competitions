@@ -36,7 +36,7 @@ class NewsSelector(object):
         # output: list of fresh news IDs
 
         # Load or generate sorted newslist file
-        if self.fresh_news_df == None:
+        if self.fresh_news_df is None:
             self.load_fresh_news_df()
         # get list of fresh news
         _df = self.fresh_news_df[self.fresh_news_df['date'] <= self.parsing_behavior_time(time, return_type='int')]
@@ -65,7 +65,7 @@ class NewsSelector(object):
         return new_key
 
     def get_pop_clicked(self, time):
-        if self.pop_hash_clicked == None:
+        if self.pop_hash_clicked is None:
             self.load_pop_hash_clicked()
         ltime = self.parsing_behavior_time(time)
         bucket_key = (ltime[0], ltime[1], ltime[2], ltime[3] // self.bucket_size)
@@ -80,7 +80,7 @@ class NewsSelector(object):
         return res
 
     def get_pop_recommended(self, time):
-        if self.pop_hash_recommended == None:
+        if self.pop_hash_recommended is None:
             self.load_pop_hash_recommended()
         ltime = self.parsing_behavior_time(time)
         bucket_key = (ltime[0], ltime[1], ltime[2], ltime[3] // self.bucket_size)

@@ -14,6 +14,7 @@ from utils.config import prepare_config
 from utils.dataloader import DataSetTrn, DataSetTest
 from utils.evaluation import ndcg_score, mrr_score
 from sklearn.metrics import roc_auc_score
+from utils.selector import NewsSelector
 
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -46,7 +47,7 @@ def set_seed(seed):
 
 @click.command()
 @click.option('--data_path', type=str, default='/data/mind')
-@click.option('--data', type=str, default='large')
+@click.option('--data', type=str, default='demo')
 @click.option('--out_path', type=str, default='../out')
 @click.option('--config_path', type=str, default='./config.yaml')
 @click.option('--eval_every', type=int, default=3)
@@ -77,16 +78,25 @@ def main(data_path, data, out_path, config_path, eval_every):
     word2idx = load_dict(config['wordDict_file'])
     uid2idx = load_dict(config['userDict_file'])
 
+    # news selector
+    trn_selector = NewsSelector(data_type1=data, data_type2='train',
+                                num_pop=config['pop'], num_fresh=config['fresh'])
+    vld_selector = NewsSelector(data_type1=data, data_type2='dev',
+                                num_pop=config['pop'], num_fresh=config['fresh'])
+
     # load datasets and define dataloaders
     trn_set = DataSetTrn(trn_paths['news'], trn_paths['behaviors'],
-                         word2idx=word2idx, uid2idx=uid2idx, config=config)
+                         word2idx=word2idx, uid2idx=uid2idx,
+                         selector=trn_selector, config=config)
     vld_set = DataSetTest(vld_paths['news'], vld_paths['behaviors'],
-                          word2idx=word2idx, uid2idx=uid2idx, config=config,
+                          word2idx=word2idx, uid2idx=uid2idx,
+                          selector=vld_selector, config=config,
                           label_known=True)
     trn_loader = DataLoader(trn_set, batch_size=config['batch_size'],
                             shuffle=True, num_workers=8)
-    vld_impr_idx, vld_his, vld_impr, vld_label =\
-        vld_set.raw_impr_idxs, vld_set.histories_words, vld_set.imprs_words, vld_set.labels
+    vld_impr_idx, vld_his, vld_impr, vld_label, vld_pop, vld_fresh =\
+        vld_set.raw_impr_idxs, vld_set.histories_words, vld_set.imprs_words,\
+        vld_set.labels, vld_set.pops_words, vld_set.freshs_words
 
     # define models, optimizer, loss
     # TODO: w2v --> BERT model
@@ -103,21 +113,26 @@ def main(data_path, data, out_path, config_path, eval_every):
         '''
         training
         '''
-        for i, (trn_his, trn_pos, trn_neg) in enumerate(trn_loader):
+        for i, (trn_his, trn_pos, trn_neg, trn_pop, trn_fresh) in enumerate(trn_loader):
             # ready for training
             model.train()
             optimizer.zero_grad()
 
             # prepare data
-            trn_his, trn_pos, trn_neg = \
-                trn_his.to(DEVICE), trn_pos.to(DEVICE), trn_neg.to(DEVICE)
+            trn_his, trn_pos, trn_neg, trn_pop, trn_fresh = \
+                trn_his.to(DEVICE), trn_pos.to(DEVICE), trn_neg.to(DEVICE),\
+                trn_pop.to(DEVICE), trn_fresh.to(DEVICE)
             trn_cand = torch.cat((trn_pos, trn_neg), dim=1)
+            trn_global = torch.cat((trn_pop, trn_fresh), dim=1)
             trn_gt = torch.zeros(size=(trn_cand.shape[0],)).long().to(DEVICE)
 
             # inference
-            trn_his_out = model(trn_his, source='history')
+            if config['global']:
+                trn_user_out = model((trn_his, trn_global), source='pgt')
+            else:
+                trn_user_out = model(trn_his, source='history')
             trn_cand_out = model(trn_cand, source='candidate')
-            prob = torch.matmul(trn_cand_out, trn_his_out.unsqueeze(2)).squeeze()
+            prob = torch.matmul(trn_cand_out, trn_user_out.unsqueeze(2)).squeeze()
 
             # training
             loss = criterion(prob, trn_gt)
@@ -141,11 +156,17 @@ def main(data_path, data, out_path, config_path, eval_every):
             for j in range(len(vld_impr)):
                 impr_idx_j = vld_impr_idx[j]
                 vld_his_j = torch.tensor(vld_his[j]).long().to(DEVICE).unsqueeze(0)
-                vld_his_out_j = model(vld_his_j, source='history')
+                vld_pop_j = torch.tensor(vld_pop[j]).long().to(DEVICE).unsqueeze(0)
+                vld_fresh_j = torch.tensor(vld_fresh[j]).long().to(DEVICE).unsqueeze(0)
+                vld_global_j = torch.cat((vld_pop_j, vld_fresh_j), dim=1)
+                if config['global']:
+                    vld_user_out_j = model((vld_his_j, vld_global_j), source='pgt')
+                else:
+                    vld_user_out_j = model(vld_his_j, source='history')
                 vld_cand_j = torch.tensor(vld_impr[j]).long().to(DEVICE).unsqueeze(0)
                 vld_cand_out_j = model(vld_cand_j, source='candidate')
 
-                scores_j = torch.matmul(vld_cand_out_j, vld_his_out_j.unsqueeze(2)).squeeze()
+                scores_j = torch.matmul(vld_cand_out_j, vld_user_out_j.unsqueeze(2)).squeeze()
                 scores_j = scores_j.detach().cpu().numpy()
                 argmax_idx = (-scores_j).argsort()
                 ranks = np.empty_like(argmax_idx)

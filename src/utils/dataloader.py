@@ -20,16 +20,18 @@ def word_tokenize(sent):
 
 
 class DataSet(torch.utils.data.Dataset):
-    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, config,
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config,
                  col_spliter="\t"):
         self.word2idx = word2idx
         self.uid2idx = uid2idx
+        self.selector = selector
         self.col_spliter = col_spliter
         self.title_size = config['title_size']
         self.his_size = config['his_size']
         self.npratio = config['npratio']
         self.nid2idx, self.news_title_index = self.init_news(news_file)
-        self.histories, self.imprs, self.labels, self.raw_impr_idxs, self.impr_idxs, self.uidxs = \
+        self.histories, self.imprs, self.labels, self.raw_impr_idxs,\
+        self.impr_idxs, self.uidxs, self.times, self.pops, self.freshs = \
             self.init_behaviors(behaviors_file)
 
     def __getitem__(self, idx):
@@ -91,6 +93,9 @@ class DataSet(torch.utils.data.Dataset):
         labels = []
         impr_indexes = []
         uindexes = []
+        times = []
+        pops = []
+        freshs = []
 
         with open(behaviors_file, 'r') as rd:
             impr_index = 0
@@ -106,15 +111,21 @@ class DataSet(torch.utils.data.Dataset):
                 label = [int(i.split("-")[1]) for i in impr.split()]
                 uindex = self.uid2idx[uid] if uid in self.uid2idx else 0
 
+                pop = [self.nid2idx[i] for i in self.selector.get_pop_recommended(time)]
+                fresh = [self.nid2idx[i] for i in self.selector.get_fresh(time)]
+
                 histories.append(history)
                 imprs.append(impr_news)
                 labels.append(label)
                 raw_impr_indexes.append(raw_impr_id)
                 impr_indexes.append(impr_index)
                 uindexes.append(uindex)
+                times.append(time)
+                pops.append(pop)
+                freshs.append(fresh)
                 impr_index += 1
 
-        return histories, imprs, labels, raw_impr_indexes, impr_indexes, uindexes
+        return histories, imprs, labels, raw_impr_indexes, impr_indexes, uindexes, times, pops, freshs
 
 
 class DataSetTrn(DataSet):
@@ -125,9 +136,10 @@ class DataSetTrn(DataSet):
     labels = None
     impr_idxs = None
     uidxs = None
+    times = None
 
-    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, config):
-        super().__init__(news_file, behaviors_file, word2idx, uid2idx, config)
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config):
+        super().__init__(news_file, behaviors_file, word2idx, uid2idx, selector, config)
 
         # unfolding
         self.histories_unfold = []
@@ -135,6 +147,9 @@ class DataSetTrn(DataSet):
         self.uidxs_unfold = []
         self.pos_unfold = []
         self.neg_unfold = []
+        self.times_unfold = []
+        self.pop_unfold = []
+        self.fresh_unfold = []
 
         for line in range(len(self.uidxs)):
             neg_idxs = [i for i, x in enumerate(self.labels[line]) if x == 0]
@@ -153,13 +168,19 @@ class DataSetTrn(DataSet):
                 self.histories_unfold.append(self.histories[line])
                 self.impr_idxs_unfold.append(self.impr_idxs[line])
                 self.uidxs_unfold.append(self.uidxs[line])
+                self.times_unfold.append(self.times[line])
+                self.pop_unfold.append(self.pops[line])
+                self.fresh_unfold.append(self.freshs[line])
 
     def __getitem__(self, idx):
         negs = sample(self.neg_unfold[idx], self.npratio)
         his = self.news_title_index[self.histories_unfold[idx]]
         pos = self.news_title_index[self.pos_unfold[idx]]
         neg = self.news_title_index[negs]
-        return torch.tensor(his).long(), torch.tensor(pos).long(), torch.tensor(neg).long()
+        pop = self.news_title_index[self.pop_unfold[idx]]
+        fresh = self.news_title_index[self.fresh_unfold[idx]]
+        return torch.tensor(his).long(), torch.tensor(pos).long(), torch.tensor(neg).long(),\
+               torch.tensor(pop).long(), torch.tensor(fresh).long()
 
     def __len__(self):
         return len(self.uidxs_unfold)
@@ -173,17 +194,22 @@ class DataSetTest(DataSet):
     labels = None
     impr_idxs = None
     uidxs = None
+    times = None
 
-    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, config, label_known=True):
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config, label_known=True):
         self.label_known = label_known
-        super().__init__(news_file, behaviors_file, word2idx, uid2idx, config)
+        super().__init__(news_file, behaviors_file, word2idx, uid2idx, selector, config)
 
         self.histories_words = []
         self.imprs_words = []
+        self.pops_words = []
+        self.freshs_words = []
 
         for i in range(len(self.histories)):
             self.histories_words.append(self.news_title_index[self.histories[i]])
             self.imprs_words.append(self.news_title_index[self.imprs[i]])
+            self.pops_words.append(self.news_title_index[self.pops[i]])
+            self.freshs_words.append(self.news_title_index[self.freshs[i]])
 
     def __getitem__(self, idx):
         pass
