@@ -18,7 +18,7 @@ class NewsSelector(object):
         # Define file names
         self.data_path = '/data/mind/' + 'MIND' + data_type1 + '_' + data_type2 + '/'
         self.behavior_file = self.data_path + 'behaviors.tsv'
-        self.news_file = self.data_path + 'integrated_news.csv' # need combined version
+        self.news_file = self.data_path + 'integrated_news.tsv'  # need combined version
         # self.news_file = '/home/yuna/data/msn_' + data_type2 + '.csv'
 
         self.fresh_news_df_file = self.data_path + "fresh_news_df.pickle"
@@ -39,24 +39,44 @@ class NewsSelector(object):
         if self.fresh_news_df == None:
             self.load_fresh_news_df()
         # get list of fresh news
-        _df = self.fresh_news_df[self.fresh_news_df['Date'] <= self.parsing_behavior_time(time, return_type='int')]
-        res = _df.sort_values(by='Date', ascending=False, inplace=False).iloc[0:self.num_fresh]
+        _df = self.fresh_news_df[self.fresh_news_df['date'] <= self.parsing_behavior_time(time, return_type='int')]
+        res = _df.sort_values(by='date', ascending=False, inplace=False).iloc[0:self.num_fresh]
 
         # print("query time: ", self.parsing_behavior_time(time, return_type='int'))
         # print("results:")
-        # for i in (res['Date'].values):
+        # for i in (res['date'].values):
         #     print(i, "--> query - i = ", self.parsing_behavior_time(time, return_type='int')-i )
-        return res.iloc[:,1].values
+        return res.iloc[:, 1].values
+
+    def _decrease_bucket_key(self, bucket_key):
+        # key: (month, date, year, time_bucket_index)
+        _m_d_dict = {1: 31, 2: 29, 3: 31, 4: 30, 5: 31, 6: 30,
+                     7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
+        if bucket_key[3] == 0:
+            if bucket_key[1] == 1:
+                if bucket_key[0] == 1:
+                    new_key = (12, _m_d_dict[bucket_key[0] - 1], bucket_key[2] - 1, 23 // self.bucket_size)
+                else:
+                    new_key = (bucket_key[0] - 1, _m_d_dict[bucket_key[0] - 1], bucket_key[2], 23 // self.bucket_size)
+            else:
+                new_key = (bucket_key[0], bucket_key[1] - 1, bucket_key[2], 23 // self.bucket_size)
+        else:
+            new_key = (bucket_key[0], bucket_key[1], bucket_key[2], bucket_key[3] - 1)
+        return new_key
 
     def get_pop_clicked(self, time):
         if self.pop_hash_clicked == None:
             self.load_pop_hash_clicked()
         ltime = self.parsing_behavior_time(time)
-        bucket_key = (ltime[0], ltime[1], ltime[2], ltime[3]//self.bucket_size)
+        bucket_key = (ltime[0], ltime[1], ltime[2], ltime[3] // self.bucket_size)
+
+        while bucket_key not in self.pop_hash_recommended.keys():
+            bucket_key = self._decrease_bucket_key(bucket_key)
+
         sorted_news_list = sorted(self.pop_hash_clicked[bucket_key].items(),
                                   reverse=True, key=lambda item: item[1])
         news_list = sorted_news_list[0:self.num_pop]
-        res = [ item[0] for item in news_list]
+        res = [item[0] for item in news_list]
         return res
 
     def get_pop_recommended(self, time):
@@ -65,24 +85,8 @@ class NewsSelector(object):
         ltime = self.parsing_behavior_time(time)
         bucket_key = (ltime[0], ltime[1], ltime[2], ltime[3] // self.bucket_size)
 
-        def _decrease_bucket_key(bucket_key):
-            # key: (month, date, year, time_bucket_index)
-            _m_d_dict = {1: 31, 2: 29, 3: 31, 4: 30, 5: 31, 6: 30,
-                         7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
-            if bucket_key[3] == 0:
-                if bucket_key[1] == 1:
-                    if bucket_key[0] == 1:
-                        new_key = (12, _m_d_dict[bucket_key[0]-1], bucket_key[2]-1, 23 // self.bucket_size)
-                    else:
-                        new_key = (bucket_key[0]-1, _m_d_dict[bucket_key[0]-1], bucket_key[2], 23 // self.bucket_size)
-                else:
-                    new_key = (bucket_key[0], bucket_key[1]-1, bucket_key[2], 23//self.bucket_size)
-            else:
-                new_key = (bucket_key[0], bucket_key[1], bucket_key[2], bucket_key[3]-1)
-            return new_key
-
         while bucket_key not in self.pop_hash_recommended.keys():
-            bucket_key = _decrease_bucket_key(bucket_key)
+            bucket_key = self._decrease_bucket_key(bucket_key)
 
         sorted_news_list = sorted(self.pop_hash_recommended[bucket_key].items(),
                                   reverse=True, key=lambda item: item[1])
@@ -112,11 +116,11 @@ class NewsSelector(object):
             self.generate_pop_hash_recommended()
 
     def generate_fresh_news_df(self):
-        news_list = []
-        _df = pd.read_csv(self.news_file)[['Date', '0']] # date and newsID
+        # news_list = []
+        _df = pd.read_csv(self.news_file, sep='\t')[['date', 'nid']]  # date and newsID
 
-        _df['Date'] = _df['Date'].map(self._process_news_date)
-        _df.sort_values(by='Date', ascending=False, inplace=True)
+        _df['date'] = _df['date'].map(self._process_news_date)
+        _df.sort_values(by='date', ascending=False, inplace=True)
 
         self.fresh_news_df = _df
         with open(self.fresh_news_df_file, 'wb') as f:
@@ -206,12 +210,13 @@ class NewsSelector(object):
             return 1e15
         t1 = date.split('T')[0].split('-')
         t2 = date.split('T')[1][:-1].split(':')
+        t2[2] = t2[2][:2]
         res = t1[0] + t1[1] + t1[2] + t2[0] + t2[1] + t2[2]
         return int(res)
 
 
 if __name__ == "__main__":
-    nr = NewsSelector(num_pop=10, num_fresh=10, data_type1 ='demo', data_type2 ='dev')
+    nr = NewsSelector(num_pop=10, num_fresh=10, data_type1='large', data_type2='dev')
     ns1 = nr.get_pop_recommended('11/15/2019 8:55:22 AM')
     ns2 = nr.get_pop_clicked('11/15/2019 8:55:22 AM')
     ns3 = nr.get_fresh('11/15/2019 8:55:22 AM')
