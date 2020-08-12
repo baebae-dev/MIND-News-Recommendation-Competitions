@@ -112,6 +112,7 @@ class DataSet(torch.utils.data.Dataset):
                 uindex = self.uid2idx[uid] if uid in self.uid2idx else 0
 
                 pop = [self.nid2idx[i] for i in self.selector.get_pop_recommended(time)]
+                # pop = [self.nid2idx[i] for i in self.selector.get_pop_clicked(time)]
                 fresh = [self.nid2idx[i] for i in self.selector.get_fresh(time)]
 
                 histories.append(history)

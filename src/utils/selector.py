@@ -70,7 +70,7 @@ class NewsSelector(object):
         ltime = self.parsing_behavior_time(time)
         bucket_key = (ltime[0], ltime[1], ltime[2], ltime[3] // self.bucket_size)
 
-        while bucket_key not in self.pop_hash_recommended.keys():
+        while bucket_key not in self.pop_hash_clicked.keys():
             bucket_key = self._decrease_bucket_key(bucket_key)
 
         sorted_news_list = sorted(self.pop_hash_clicked[bucket_key].items(),
