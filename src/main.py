@@ -47,26 +47,30 @@ def set_seed(seed):
 
 @click.command()
 @click.option('--data_path', type=str, default='/data/mind')
-@click.option('--data', type=str, default='demo')
+@click.option('--data', type=str, default='large')
 @click.option('--out_path', type=str, default='../out')
 @click.option('--config_path', type=str, default='./config.yaml')
 @click.option('--eval_every', type=int, default=3)
 def main(data_path, data, out_path, config_path, eval_every):
-    # paths
+    # read paths
     trn_data = os.path.join(data_path, f'MIND{data}_train')
     vld_data = os.path.join(data_path, f'MIND{data}_dev')
     util_data = os.path.join(data_path, 'utils')
     trn_paths = set_data_paths(trn_data)
     vld_paths = set_data_paths(vld_data)
     util_paths = set_util_paths(util_data)
-    out_path = os.path.join(out_path, f'MIND{data}_dev_{eval_every}')
-    os.makedirs(out_path, exist_ok=True)
 
     # read configuration file
     config = prepare_config(config_path,
                             wordEmb_file=util_paths['embedding'],
                             wordDict_file=util_paths['word_dict'],
                             userDict_file=util_paths['uid2index'])
+
+    # out path
+    num_global = config['pop']
+    num_fresh = config['fresh']
+    out_path = os.path.join(out_path, f'MIND{data}_dev_pop{num_global}_fresh{num_fresh}')
+    os.makedirs(out_path, exist_ok=True)
 
     # set
     seed = config['seed']

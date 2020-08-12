@@ -2,8 +2,8 @@ data:
   title_size: 30
   his_size: 50
   npratio: 4
-  pop: 5
-  fresh: 5
+  pop: 7
+  fresh: 1
   
 info:
   metrics:
@@ -23,6 +23,6 @@ model:
 train:
   seed: 42
   batch_size: 128
-  epochs: 20
+  epochs: 60
   learning_rate: 0.0001
   weight_decay: 0
