@@ -6,10 +6,10 @@ import click
 import numpy as np
 import torch
 import torch.nn as nn
-import tqdm
 from sklearn.metrics import roc_auc_score
 from torch import optim
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from models.nrms import NRMS
 from utils.config import prepare_config
@@ -58,9 +58,13 @@ def main(data_path, data, out_path, config_path, eval_every):
     trn_data = os.path.join(data_path, f'MIND{data}_train')
     vld_data = os.path.join(data_path, f'MIND{data}_dev')
     util_data = os.path.join(data_path, 'utils')
+
     trn_paths = set_data_paths(trn_data)
     vld_paths = set_data_paths(vld_data)
     util_paths = set_util_paths(util_data)
+
+    trn_pickle_path = os.path.join(trn_data, 'dataset.pickle')
+    vld_pickle_path = os.path.join(vld_data, 'dataset.pickle')
 
     # read configuration file
     config = prepare_config(config_path,
@@ -84,20 +88,34 @@ def main(data_path, data, out_path, config_path, eval_every):
     word2idx = load_dict(config['wordDict_file'])
     uid2idx = load_dict(config['userDict_file'])
 
-    # news selector
-    trn_selector = NewsSelector(data_type1=data, data_type2='train',
-                                num_pop=config['pop'], num_fresh=config['fresh'])
-    vld_selector = NewsSelector(data_type1=data, data_type2='dev',
-                                num_pop=config['pop'], num_fresh=config['fresh'])
-
     # load datasets and define dataloaders
-    trn_set = DataSetTrn(trn_paths['news'], trn_paths['behaviors'],
-                         word2idx=word2idx, uid2idx=uid2idx,
-                         selector=trn_selector, config=config)
-    vld_set = DataSetTest(vld_paths['news'], vld_paths['behaviors'],
-                          word2idx=word2idx, uid2idx=uid2idx,
-                          selector=vld_selector, config=config,
-                          label_known=True)
+    if os.path.exists(trn_pickle_path):
+        with open(trn_pickle_path, 'rb') as f:
+            trn_set = pickle.load(f)
+    else:
+        trn_selector = NewsSelector(data_type1=data, data_type2='train',
+                                    num_pop=20,
+                                    num_fresh=20)
+        trn_set = DataSetTrn(trn_paths['news'], trn_paths['behaviors'],
+                             word2idx=word2idx, uid2idx=uid2idx,
+                             selector=trn_selector, config=config)
+        with open(trn_pickle_path, 'wb') as f:
+            pickle.dump(trn_set, f)
+
+    if os.path.exists(vld_pickle_path):
+        with open(vld_pickle_path, 'rb') as f:
+            vld_set = pickle.load(f)
+    else:
+        vld_selector = NewsSelector(data_type1=data, data_type2='dev',
+                                    num_pop=20,
+                                    num_fresh=20)
+        vld_set = DataSetTest(vld_paths['news'], vld_paths['behaviors'],
+                              word2idx=word2idx, uid2idx=uid2idx,
+                              selector=vld_selector, config=config,
+                              label_known=True)
+        with open(vld_pickle_path, 'wb') as f:
+            pickle.dump(vld_set, f)
+
     trn_loader = DataLoader(trn_set, batch_size=config['batch_size'],
                             shuffle=True, num_workers=8)
     vld_impr_idx, vld_his, vld_impr, vld_label, vld_pop, vld_fresh =\
@@ -112,7 +130,7 @@ def main(data_path, data, out_path, config_path, eval_every):
                            weight_decay=float(config['weight_decay']))
     criterion = nn.CrossEntropyLoss()
 
-    print(f'[{time.time()-start_time:5.2f} Sec] Prepared for training...')
+    print(f'[{time.time()-start_time:5.2f} Sec] Ready for training...')
 
     # train and evaluate
     for epoch in range(1, epochs+1):
@@ -121,7 +139,8 @@ def main(data_path, data, out_path, config_path, eval_every):
         '''
         training
         '''
-        for i, (trn_his, trn_pos, trn_neg, trn_pop, trn_fresh) in tqdm.tqdm(enumerate(trn_loader)):
+        for i, (trn_his, trn_pos, trn_neg, trn_pop, trn_fresh) \
+                in tqdm(enumerate(trn_loader), desc='Training', total=len(trn_loader)):
             # ready for training
             model.train()
             optimizer.zero_grad()
@@ -130,6 +149,8 @@ def main(data_path, data, out_path, config_path, eval_every):
             trn_his, trn_pos, trn_neg, trn_pop, trn_fresh = \
                 trn_his.to(DEVICE), trn_pos.to(DEVICE), trn_neg.to(DEVICE),\
                 trn_pop.to(DEVICE), trn_fresh.to(DEVICE)
+            trn_pop = trn_pop[:, :config['pop'], :]
+            trn_fresh = trn_fresh[:, :config['fresh'], :]
             trn_cand = torch.cat((trn_pos, trn_neg), dim=1)
             trn_global = torch.cat((trn_pop, trn_fresh), dim=1)
             trn_gt = torch.zeros(size=(trn_cand.shape[0],)).long().to(DEVICE)
@@ -161,11 +182,13 @@ def main(data_path, data, out_path, config_path, eval_every):
         evaluation
         '''
         with open(os.path.join(out_path, f'prediction-{epoch}.txt'), 'w') as f:
-            for j in range(len(vld_impr)):
+            for j in tqdm(range(len(vld_impr)), desc='Evaluation', total=len(vld_impr)):
                 impr_idx_j = vld_impr_idx[j]
                 vld_his_j = torch.tensor(vld_his[j]).long().to(DEVICE).unsqueeze(0)
                 vld_pop_j = torch.tensor(vld_pop[j]).long().to(DEVICE).unsqueeze(0)
                 vld_fresh_j = torch.tensor(vld_fresh[j]).long().to(DEVICE).unsqueeze(0)
+                vld_pop_j = vld_pop_j[:, :config['pop'], :]
+                vld_fresh_j = vld_fresh_j[:, :config['fresh'], :]
                 vld_global_j = torch.cat((vld_pop_j, vld_fresh_j), dim=1)
                 if config['global']:
                     vld_user_out_j = model((vld_his_j, vld_global_j), source='pgt')
