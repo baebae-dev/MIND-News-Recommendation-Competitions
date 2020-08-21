@@ -12,6 +12,7 @@ from shutil import copyfile
 import importlib
 import os
 
+# model config load
 try:
     config = getattr(importlib.import_module('config'), f"{model_name}Config")
 except AttributeError:
@@ -31,7 +32,8 @@ def parse_behaviors(source, target, val_target, user2int_path):
     print(f"Parse {source}")
     with open(source, 'r') as f:
         lines = f.readlines()
-    random.shuffle(lines)
+    # 순서 섞어 랜덤으로 10% validation set setting 
+    random.shuffle(lines) 
     with open(val_target, 'w') as f:
         f.writelines(lines[:int(len(lines) * config.validation_proportion)])
 
@@ -55,7 +57,7 @@ def parse_behaviors(source, target, val_target, user2int_path):
         f'Please modify `num_users` in `src/config.py` into 1 + {len(user2int)}'
     )
 
-    # Drop rows in val_behaviors
+    # Drop rows in val_behaviors 
     val_behaviors = pd.read_table(val_target,
                                   header=None,
                                   usecols=[0],
@@ -271,11 +273,12 @@ def generate_word_embedding(source, target, word2int_path):
         target: path for saving word embedding. Will be saved in numpy format
         word2int_path: vocabulary file when words in it will be searched in pretrained embedding file
     """
+
     # na_filter=False is needed since nan is also a valid word
     # word, int
     word2int = pd.read_table(word2int_path, na_filter=False, index_col='word')
     source_embedding = pd.read_table(source,
-                                     index_col=0,
+                                     index_col=0, 
                                      sep=' ',
                                      header=None,
                                      quoting=csv.QUOTE_NONE,
@@ -324,7 +327,7 @@ def transform_entity_embedding(source, target, entity2int_path):
         (len(entity2int) + 1, config.entity_embedding_dim))
     for row in merged_df.itertuples(index=False):
         entity_embedding_transformed[row.int] = row.vector
-    np.save(target, entity_embedding_transformed)
+    np.save(target, entity_embedding_transformed) 
 
 
 def transform2txt(source, target):

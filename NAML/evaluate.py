@@ -193,7 +193,7 @@ def evaluate(model, directory, generate_txt=False, txt_path=None):
         list(news2vector.values())[0].size())
 
     user_dataset = UserDataset(os.path.join(directory, 'behaviors.tsv'),
-                               'data/train/user2int.tsv')
+                               '../data/train/user2int.tsv')
     user_dataloader = DataLoader(user_dataset,
                                  batch_size=config.batch_size,
                                  shuffle=False,
@@ -286,12 +286,12 @@ if __name__ == '__main__':
     if checkpoint_path is None:
         print('No checkpoint file found!')
         exit()
-    print(f"Load saved parameters in {checkpoint_path}")
+    print(f"Load saved parameters in {checkpoint_path}") 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
-    auc, mrr, ndcg5, ndcg10 = evaluate(model, './data/test', True,
-                                       './data/test/prediction.txt')
+    auc, mrr, ndcg5, ndcg10 = evaluate(model, '../data/test', True,
+                                       '../data/test/prediction.txt')
     print(
         f'AUC: {auc:.4f}\nMRR: {mrr:.4f}\nnDCG@5: {ndcg5:.4f}\nnDCG@10: {ndcg10:.4f}'
     )
