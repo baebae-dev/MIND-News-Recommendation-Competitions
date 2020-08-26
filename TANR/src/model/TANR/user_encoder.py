@@ -1,7 +1,7 @@
 import torch
 from model.general.attention.additive import AdditiveAttention
 
- 
+
 class UserEncoder(torch.nn.Module):
     def __init__(self, config):
         super(UserEncoder, self).__init__()

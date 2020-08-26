@@ -5,7 +5,7 @@ model_name = os.environ['MODEL_NAME'] if 'MODEL_NAME' in os.environ else 'NAML'
 assert model_name == 'NAML'
 
 
-class BaseConfig():
+class BaseConfig(): 
     """
     General configurations appiled to all models
     """

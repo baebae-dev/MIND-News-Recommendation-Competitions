@@ -320,3 +320,4 @@ dmypy.json
 .pyre/
 
 /NAML/data/
+/TANR/data/

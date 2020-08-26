@@ -4,7 +4,7 @@ import torch.nn as nn
 from models.utils import SelfAttn, LinearAttn, GlobalAttn
 
 
-class NRMS(nn.Module):
+class NRMS(nn.Module): 
     def __init__(self, config, word2vec_embedding):
         super(NRMS, self).__init__()
         self.word_emb = nn.Embedding(word2vec_embedding.shape[0], config['word_emb_dim'])

@@ -1,7 +1,7 @@
 import os
 import pickle
 import time
-
+ 
 import click
 import numpy as np
 import torch
@@ -73,8 +73,8 @@ def main(data_path, data, out_path, config_path, eval_every):
                             userDict_file=util_paths['uid2index'])
 
     # out path
-    num_global = config['pop']
-    num_fresh = config['fresh']
+    num_global = config['pop'] # 7
+    num_fresh = config['fresh'] # 1 
     out_path = os.path.join(out_path, f'MIND{data}_dev_pop{num_global}_fresh{num_fresh}')
     os.makedirs(out_path, exist_ok=True)
 
