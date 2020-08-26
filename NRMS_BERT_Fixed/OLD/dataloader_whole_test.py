@@ -1,12 +1,15 @@
+import os
 import torch
 import re
 import numpy as np
 from random import sample
 from tqdm import tqdm
-import pandas as pd
 import timeit
-import os
+import pandas as pd
+import pickle
+
 from utils.utils import parallelize_dataframe, process_behaviors
+from utils.bert import get_word_embedding_bert
 
 
 # def word_tokenize(sent):
@@ -25,10 +28,9 @@ from utils.utils import parallelize_dataframe, process_behaviors
 
 
 class DataSet(torch.utils.data.Dataset):
-    def __init__(self, news_file, behaviors_file, tokenizer, uid2idx, selector, config,
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config,
                  col_spliter="\t"):
-        # self.word2idx = word2idx
-        self.tokenizer = tokenizer # I fixed
+        self.word2idx = word2idx
         self.uid2idx = uid2idx
         self.selector = selector
         self.col_spliter = col_spliter
@@ -36,7 +38,7 @@ class DataSet(torch.utils.data.Dataset):
         self.his_size = config['his_size']
         self.npratio = config['npratio']
         self.num_cores = config['num_cores']
-        self.nid2idx, self.input_ids, self.attention_mask = self.init_news(news_file)
+        self.nid2idx, self.news_title_index = self.init_news(news_file)
         self.histories, self.imprs, self.labels, self.raw_impr_idxs,\
         self.impr_idxs, self.uidxs, self.times, self.pops, self.freshs = \
             self.init_behaviors(behaviors_file)
@@ -56,19 +58,18 @@ class DataSet(torch.utils.data.Dataset):
             news_title_index: word_ids of titles
         """
 
-        st = timeit.default_timer()
-        news_title = [""]
-        df = pd.read_csv(news_file, sep=self.col_spliter, header=None)
-        titles = news_title + df[3].map(lambda x: '[CLS]' + x + '[SEP]').tolist()
-        inputs = self.tokenizer(titles, return_tensors="pt", padding=True,
-                                truncation=True, max_length=self.title_size,
-                                add_special_tokens=False)
-        nid2index = {}
-        for idx, nid in enumerate(df[0]):
-            nid2index[nid] = idx+1
+        tokens = news_file.split('/')
+        pickle_file = '/'.join(tokens[:-1]) + f"/BERT/bert_title_{self.title_size}.pickle"
 
-        print(f"Initializing News End ({timeit.default_timer() - st}s)")
-        return nid2index, inputs['input_ids'], inputs['attention_mask']
+        assert os.path.isfile(pickle_file)
+        # if not os.path.isfile(pickle_file):
+        #     get_word_embedding_bert(news_file, pickle_file, title_size=self.title_size, n=30)
+
+        with open(pickle_file, 'rb') as f:
+            nid2index, news_title_index = pickle.load(f)
+        news_title_index.requires_grad=False
+
+        return nid2index, news_title_index
 
     def init_behaviors(self, behaviors_file):
         """ init behavior logs given behaviors file.
@@ -105,8 +106,7 @@ class DataSet(torch.utils.data.Dataset):
 
 class DataSetTrn(DataSet):
     nid2idx = None
-    input_ids = None
-    attention_mask = None
+    news_title_index = None
     histories = None
     imprs = None
     labels = None
@@ -114,9 +114,8 @@ class DataSetTrn(DataSet):
     uidxs = None
     times = None
 
-    def __init__(self, news_file, behaviors_file, tokenizer, uid2idx, selector, config):
-        super().__init__(news_file, behaviors_file, tokenizer, uid2idx, selector, config)
-
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config):
+        super().__init__(news_file, behaviors_file, word2idx, uid2idx, selector, config)
         # unfolding
         self.histories_unfold = []
         self.impr_idxs_unfold = []
@@ -150,28 +149,15 @@ class DataSetTrn(DataSet):
 
     def __getitem__(self, idx):
         negs = sample(self.neg_unfold[idx], self.npratio)
-
-        his_in = self.input_ids[self.histories_unfold[idx]]
-        his_att = self.attention_mask[self.histories_unfold[idx]]
-        his = {'input_ids': his_in, 'attention_mask':his_att}
-
-        pos_in = self.input_ids[self.pos_unfold[idx]]
-        pos_att = self.attention_mask[self.pos_unfold[idx]]
-        pos = {'input_ids': pos_in, 'attention_mask': pos_att}
-
-        neg_in = self.input_ids[negs]
-        neg_att = self.attention_mask[negs]
-        neg = {'input_ids': neg_in, 'attention_mask': neg_att}
-
-        pop_in = self.input_ids[self.pop_unfold[idx]]
-        pop_att = self.attention_mask[self.pop_unfold[idx]]
-        pop = {'input_ids': pop_in, 'attention_mask': pop_att}
-
-        fresh_in = self.input_ids[self.fresh_unfold[idx]]
-        fresh_att = self.attention_mask[self.fresh_unfold[idx]]
-        fresh = {'input_ids': fresh_in, 'attention_mask': fresh_att}
-
+        his = self.news_title_index[self.histories_unfold[idx]]
+        pos = self.news_title_index[self.pos_unfold[idx]]
+        neg = self.news_title_index[negs]
+        pop = self.news_title_index[self.pop_unfold[idx]]
+        fresh = self.news_title_index[self.fresh_unfold[idx]]
         return his, pos, neg, pop, fresh
+
+        # return torch.tensor(his).long(), torch.tensor(pos).long(), torch.tensor(neg).long(),\
+        #        torch.tensor(pop).long(), torch.tensor(fresh).long()
 
     def __len__(self):
         return len(self.uidxs_unfold)
@@ -179,8 +165,7 @@ class DataSetTrn(DataSet):
 
 class DataSetTest(DataSet):
     nid2idx = None
-    input_ids = None
-    attention_mask = None
+    news_title_index = None
     histories = None
     imprs = None
     labels = None
@@ -188,9 +173,9 @@ class DataSetTest(DataSet):
     uidxs = None
     times = None
 
-    def __init__(self, news_file, behaviors_file, tokenizer, uid2idx, selector, config, label_known=True):
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config, label_known=True):
         self.label_known = label_known
-        super().__init__(news_file, behaviors_file, tokenizer, uid2idx, selector, config)
+        super().__init__(news_file, behaviors_file, word2idx, uid2idx, selector, config)
 
         self.histories_words = []
         self.imprs_words = []
@@ -198,37 +183,10 @@ class DataSetTest(DataSet):
         self.freshs_words = []
 
         for i in range(len(self.histories)):
-            self.histories_words.append(
-                {
-                    'input_ids': self.input_ids[self.histories[i]],
-                    'attention_mask': self.attention_mask[self.histories[i]]
-                }
-            )
-            self.imprs_words.append(
-                {
-                    'input_ids': self.input_ids[self.imprs[i]],
-                    'attention_mask': self.attention_mask[self.imprs[i]]
-                }
-            )
-
-            self.pops_words.append(
-                {
-                    'input_ids': self.input_ids[self.pops[i]],
-                    'attention_mask': self.attention_mask[self.pops[i]]
-                }
-            )
-
-            self.freshs_words.append(
-                {
-                    'input_ids': self.input_ids[self.freshs[i]],
-                    'attention_mask': self.attention_mask[self.freshs[i]]
-                }
-            )
-
-            # self.histories_words.append(self.news_title_index[self.histories[i]])
-            # self.imprs_words.append(self.news_title_index[self.imprs[i]])
-            # self.pops_words.append(self.news_title_index[self.pops[i]])
-            # self.freshs_words.append(self.news_title_index[self.freshs[i]])
+            self.histories_words.append(self.news_title_index[self.histories[i]])
+            self.imprs_words.append(self.news_title_index[self.imprs[i]])
+            self.pops_words.append(self.news_title_index[self.pops[i]])
+            self.freshs_words.append(self.news_title_index[self.freshs[i]])
 
     def __getitem__(self, idx):
         pass
