@@ -58,7 +58,7 @@ def set_seed(seed):
 @click.option('--local_rank', type=int, default=0)
 @click.option('--data_path', type=str, default='/data/mind')
 @click.option('--data', type=str, default='demo')
-@click.option('--out_path', type=str, default='../out')
+@click.option('--out_path', type=str, default='./out/nrms_bert_finetuning_1')
 @click.option('--config_path', type=str, default='./config.yaml')
 @click.option('--eval_every', type=int, default=1)
 def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
@@ -109,9 +109,9 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
     # tokenizer = DistilBertTokenizer.from_pretrained(bert_model_name)
     # bert_model = DistilBertModel.from_pretrained(bert_model_name)
 
-    bert_model_name = "mrm8488/es-tinybert-v1-1"
-    tokenizer = AutoTokenizer.from_pretrained(bert_model_name)
-    bert_model = AutoModel.from_pretrained(bert_model_name)
+    bert_model_name = "bert-base-uncased"
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    bert_model = BertModel.from_pretrained(bert_model_name)
 
     # load datasets and define dataloaders
     # if False:
@@ -266,7 +266,7 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
                     ranks = np.empty_like(argmax_idx)
                     ranks[argmax_idx] = np.arange(1, scores_j.shape[0]+1)
                     ranks_str = ','.join([str(r) for r in list(ranks)])
-                    f.write(f'{impr_idx_j} [{ranks_str}]\n')
+                    f.write(f'{impr_idx_j.item()} [{ranks_str}]\n')
 
                     vld_gt_j = np.array(vld_label[j])
 
@@ -294,7 +294,7 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
                 if enum < len(metrics):
                     result += ', '
             print(result)
-
-
+            model_pth = os.path.join(out_path, f'bert_fixed_title-{epoch}.pth')
+            torch.save(model.state_dict(), model_pth)
 if __name__ == '__main__':
     main()

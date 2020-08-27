@@ -16,9 +16,9 @@ from apex.parallel import DistributedDataParallel as DDP
 torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
 
-from models.nrms import NRMS
+from models.nrms_origin import NRMS
 from utils.config import prepare_config
-from utils.dataloader import DataSetTrn, DataSetTest
+from utils.dataloader_origin import DataSetTrn, DataSetTest
 from utils.evaluation import ndcg_score, mrr_score
 from utils.selector import NewsSelector
 
@@ -54,9 +54,9 @@ def set_seed(seed):
 @click.option('--local_rank', type=int, default=0)
 @click.option('--data_path', type=str, default='/data/mind')
 @click.option('--data', type=str, default='demo')
-@click.option('--out_path', type=str, default='./out')
+@click.option('--out_path', type=str, default='./out/nrms_bert_fixed_title_1')
 @click.option('--config_path', type=str, default='./config.yaml')
-@click.option('--eval_every', type=int, default=3)
+@click.option('--eval_every', type=int, default=2)
 def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
     # ignore outputs without the first process
     if local_rank != 0:
@@ -75,8 +75,8 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
     vld_paths = set_data_paths(vld_data)
     util_paths = set_util_paths(util_data)
 
-    trn_pickle_path = os.path.join(trn_data, 'dataset_bert.pickle')
-    vld_pickle_path = os.path.join(vld_data, 'dataset_bert.pickle')
+    # trn_pickle_path = os.path.join(trn_data, 'dataset_bert.pickle')
+    # vld_pickle_path = os.path.join(vld_data, 'dataset_bert.pickle')
 
     # read configuration file
     config = prepare_config(config_path,
@@ -89,6 +89,7 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
     num_fresh = config['fresh']
     out_path = os.path.join(out_path, f'MIND{data}_dev_pop{num_global}_fresh{num_fresh}')
     os.makedirs(out_path, exist_ok=True)
+    log_file = open(os.path.join(out_path, 'log.txt'), 'a')
 
     # set
     seed = config['seed']
@@ -108,8 +109,7 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
         pass
     else:
         trn_selector = NewsSelector(data_type1=data, data_type2='train',
-                                    num_pop=20,
-                                    num_fresh=20)
+                                    num_pop=20,num_fresh=20)
         trn_set = DataSetTrn(trn_paths['news'], trn_paths['behaviors'],
                              word2idx=word2idx, uid2idx=uid2idx,
                              selector=trn_selector, config=config)
@@ -123,8 +123,7 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
         pass
     else:
         vld_selector = NewsSelector(data_type1=data, data_type2='dev',
-                                    num_pop=20,
-                                    num_fresh=20)
+                                    num_pop=20, num_fresh=20)
         vld_set = DataSetTest(vld_paths['news'], vld_paths['behaviors'],
                               word2idx=word2idx, uid2idx=uid2idx,
                               selector=vld_selector, config=config,
@@ -165,17 +164,15 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
             model.train()
             optimizer.zero_grad()
 
-            trn_cand, trn_global = {}, {}
-            for key in trn_his.keys():
-                # prepare data
-                trn_his[key], trn_pos[key], trn_neg[key], trn_pop[key], trn_fresh[key] = \
-                    trn_his.to(DEVICE), trn_pos.to(DEVICE), trn_neg.to(DEVICE),\
-                    trn_pop.to(DEVICE), trn_fresh.to(DEVICE)
-                trn_pop[key] = trn_pop[key][:, :config['pop'], :]
-                trn_fresh[key] = trn_fresh[key][:, :config['fresh'], :]
-                trn_cand[key] = torch.cat((trn_pos[key], trn_neg[key]), dim=1)
-                trn_global[key] = torch.cat((trn_pop[key], trn_fresh[key]), dim=1)
-            trn_gt = torch.zeros(size=(trn_cand['title'].shape[0],)).long().to(DEVICE)
+            # prepare data
+            trn_his, trn_pos, trn_neg, trn_pop, trn_fresh = \
+                trn_his.to(DEVICE), trn_pos.to(DEVICE), trn_neg.to(DEVICE),\
+                trn_pop.to(DEVICE), trn_fresh.to(DEVICE)
+            trn_pop = trn_pop[:, :config['pop'], :]
+            trn_fresh = trn_fresh[:, :config['fresh'], :]
+            trn_cand = torch.cat((trn_pos, trn_neg), dim=1)
+            trn_global = torch.cat((trn_pop, trn_fresh), dim=1)
+            trn_gt = torch.zeros(size=(trn_cand.shape[0],)).long().to(DEVICE)
 
             # inference
             if config['global']:
@@ -206,20 +203,17 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
         model.eval()
         if local_rank==0:
             with open(os.path.join(out_path, f'prediction-{epoch}.txt'), 'w') as f:
-                # for j in tqdm(range(len(vld_impr)), desc='Evaluation', total=len(vld_impr)):
                 for j, (impr_idx_j, vld_his_j, vld_cand_j, vld_label_j, vld_pop_j, vld_fresh_j) \
                     in tqdm(enumerate(vld_loader), desc='Evaluation', total=len(vld_loader)):
 
                     # Get model output
-                    vld_global_j = {}
-                    for key in vld_his_j.keys():
-                        vld_his_j[key], vld_pop_j[key], vld_fresh_j[key], vld_cand_j[key] = \
-                        vld_his_j[key].to(DEVICE), vld_pop_j[key].to(DEVICE), \
-                        vld_fresh_j[key].to(DEVICE), vld_cand_j[key].to(DEVICE)
+                    vld_his_j, vld_pop_j, vld_fresh_j, vld_cand_j = \
+                    vld_his_j.to(DEVICE), vld_pop_j.to(DEVICE), \
+                    vld_fresh_j.to(DEVICE), vld_cand_j.to(DEVICE)
 
-                        vld_pop_j[key] = vld_pop_j[key][:, :config['pop'], :]
-                        vld_fresh_j[key] = vld_fresh_j[key][:, :config['fresh'], :]
-                        vld_global_j[key] = torch.cat((vld_pop_j, vld_fresh_j), dim=1)
+                    vld_pop_j = vld_pop_j[:, :config['pop'], :]
+                    vld_fresh_j = vld_fresh_j[:, :config['fresh'], :]
+                    vld_global_j = torch.cat((vld_pop_j, vld_fresh_j), dim=1)
                     if config['global']:
                         vld_user_out_j = model((vld_his_j, vld_global_j), source='pgt')
                     else:
@@ -227,7 +221,6 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
                     vld_cand_out_j = model(vld_cand_j, source='candidate')
 
                     # Get model output end
-
                     scores_j = torch.matmul(vld_cand_out_j, vld_user_out_j.unsqueeze(2)).squeeze()
                     scores_j = scores_j.detach().cpu().numpy()
                     argmax_idx = (-scores_j).argsort()
@@ -252,9 +245,7 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
 
             for metric, _ in metrics.items():
                 metrics[metric] /= len(vld_loader) # len(vld_impr)
-
             end_time = time.time()
-
             result = f'Epoch {epoch:3d} [{inter_time - start_time:5.2f} / {end_time - inter_time:5.2f} Sec]' \
                      f', TrnLoss:{epoch_loss:.4f}, '
             for enum, (metric, _) in enumerate(metrics.items(), start=1):
@@ -262,6 +253,11 @@ def main(gpus, local_rank, data_path, data, out_path, config_path, eval_every):
                 if enum < len(metrics):
                     result += ', '
             print(result)
+            model_pth = os.path.join(out_path, f'bert_fixed_title-{epoch}.pth')
+            torch.save(model.state_dict(), model_pth)
+            log_file.write(result + '\n')
+    log_file.close()
+
 
 if __name__ == '__main__':
     main()
