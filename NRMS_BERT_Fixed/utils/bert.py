@@ -74,7 +74,7 @@ def get_subcategory_embedding_bert(df, tokenizer, model, pickle_file):
 
 if __name__ == "__main__":
     print('start')
-    model_name = 'bert-base-uncased'
+    model_name = 'bert-large-uncased'
     tokenizer = BertTokenizer.from_pretrained(model_name)
     model = BertModel.from_pretrained(model_name)
 
@@ -87,18 +87,18 @@ if __name__ == "__main__":
 
             # get title embedding
             title_size = 30
-            title_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/bert_title_{title_size}.pickle'
+            title_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_title_{title_size}.pickle'
             # get_title_embedding_bert(df, tokenizer, model, title_pickle_file, title_size=30, n=30)
             print(f"{dt1}-{dt2}/ get title embedding done")
 
             # get category embedding
-            category_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/bert_category.pickle'
+            category_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_category.pickle'
             get_category_embedding_bert(df, tokenizer, model, category_pickle_file)
             print(f"{dt1}-{dt2}/ get category embedding done")
 
             # get subcategory embedding
-            subcategory_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/bert_subcategory.pickle'
-            get_subcategory_embedding_bert(df, tokenizer, model, category_pickle_file)
+            subcategory_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_subcategory.pickle'
+            # get_subcategory_embedding_bert(df, tokenizer, model, category_pickle_file)
             print(f"{dt1}-{dt2}/ get subcategory embedding done")
 
             # checks

@@ -57,7 +57,7 @@ def set_seed(seed):
 @click.option('--gpus', type=str, default='4,5')
 @click.option('--local_rank', type=int, default=0)
 @click.option('--data_path', type=str, default='/data/mind')
-@click.option('--data', type=str, default='demo')
+@click.option('--data', type=str, default='large')
 @click.option('--out_path', type=str, default='./out/nrms_bert_finetuning_1')
 @click.option('--config_path', type=str, default='./config.yaml')
 @click.option('--eval_every', type=int, default=1)

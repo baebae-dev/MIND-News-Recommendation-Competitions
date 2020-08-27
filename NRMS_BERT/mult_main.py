@@ -1,7 +1,7 @@
 import os
 import apex
 
-gpus = '1,2,3,4,5'
+gpus = '0,1,2,3'
 num_gpus = len(gpus.strip().split(','))
 # os.system("conda activate mind3")
 # path = '~/.conda/envs/mind3/lib/python3.6/site-packages/'

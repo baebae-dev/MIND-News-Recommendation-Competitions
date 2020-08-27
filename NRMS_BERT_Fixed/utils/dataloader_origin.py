@@ -61,7 +61,7 @@ class DataSet(torch.utils.data.Dataset):
         tokens = news_file.split('/')
 
         # Get title embeddings
-        title_pickle_file = '/'.join(tokens[:-1]) + f"/BERT/bert_title_{self.title_size}.pickle"
+        title_pickle_file = '/'.join(tokens[:-1]) + f"/BERT/large_bert_title_{self.title_size}.pickle"
         assert os.path.isfile(title_pickle_file)
         # if not os.path.isfile(pickle_file):
         #     get_word_embedding_bert(news_file, pickle_file, title_size=self.title_size, n=30)
