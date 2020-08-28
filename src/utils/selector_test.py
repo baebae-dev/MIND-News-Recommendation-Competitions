@@ -2,9 +2,10 @@ import os
 import pickle
 import pandas as pd
 import numpy as np
+import tqdm
 
 
-class NewsSelector(object):
+class NewsSelectorTest(object):
     # popular bucket (clicked): [key/ value] = [bucket index/ list of news]
     # popular bucket (recommended): [key/ value] = [bucket index/ list of news]
     # sorted list of newses in order of time. (Only containing new keys)
@@ -19,7 +20,7 @@ class NewsSelector(object):
         # Define file names
         self.data_path = '/data/mind/' + 'MIND' + data_type1 + '_' + data_type2 + '/'
         self.behavior_file = self.data_path + 'behaviors.tsv'
-        self.news_file = self.data_path + 'integrated_news.tsv'  # need combined version
+        # self.news_file = self.data_path + 'integrated_news.tsv'  # need combined version
         # self.news_file = '/home/yuna/data/msn_' + data_type2 + '.csv'
 
         self.fresh_news_df_file = self.data_path + "fresh_news_df.pickle"
@@ -124,10 +125,21 @@ class NewsSelector(object):
             self.generate_pop_hash_recommended()
 
     def generate_fresh_news_df(self):
-        # news_list = []
-        _df = pd.read_csv(self.news_file, sep='\t')[['date', 'nid']]  # date and newsID
+        news2time = {}
+        df = pd.read_csv(self.behavior_file, sep='\t', header=None)
 
-        _df['date'] = _df['date'].map(self._process_news_date)
+        for i in tqdm.tqdm(range(df.shape[0])):
+            _imp = df.iloc[i, :]
+            ltime = self._process_news_date2(_imp[2])
+            imprs = _imp[4].split(' ')
+            for imp in imprs:
+                if imp in news2time:
+                    news2time[imp].append(ltime)
+                else:
+                    news2time[imp] = [ltime]
+        for k, v in tqdm.tqdm(news2time.items()):
+            news2time[k] = min(v)
+        _df = pd.DataFrame(news2time.items(), columns=['nid', 'date'])[['date', 'nid']]
         _df.sort_values(by='date', ascending=False, inplace=True)
 
         self.fresh_news_df = _df
@@ -216,16 +228,30 @@ class NewsSelector(object):
         # need to consider nan values => 1e15 !
         if type(date) == float:
             return 1e15
+        print(date)
         t1 = date.split('T')[0].split('-')
         t2 = date.split('T')[1][:-1].split(':')
         t2[2] = t2[2][:2]
         res = t1[0] + t1[1] + t1[2] + t2[0] + t2[1] + t2[2]
         return int(res)
 
+    def _process_news_date2(self, date):
+        # need to consider nan values => 1e15 !
+        if type(date) == float:
+            return 1e15
+        t1 = date.split(' ')[0].split('/')
+        t2 = date.split(' ')[1].split(':')
+        t3 = date.split(' ')[2]
+        if t3 == 'PM':
+            t2[0] = str(int(t2[0]) + 12)
+        res = t1[2] + t1[1] + t1[0] + t2[0] + t2[1] + t2[2]
+        return int(res)
+
 
 if __name__ == "__main__":
-    nr = NewsSelector(num_pop=10, num_fresh=10, data_type1='large', data_type2='dev')
-    # ns1 = nr.get_pop_recommended('11/15/2019 8:55:22 AM')
+    nr = NewsSelectorTest(num_pop=10, num_fresh=10, data_type1='large', data_type2='test')
+    ns1 = nr.get_pop_recommended('11/15/2019 8:55:22 AM')
     # ns2 = nr.get_pop_clicked('11/15/2019 8:55:22 AM')
     ns3 = nr.get_fresh('11/15/2019 8:55:22 AM')
+    print(ns1)
     print(ns3)

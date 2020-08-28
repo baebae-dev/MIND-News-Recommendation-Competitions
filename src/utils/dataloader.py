@@ -21,16 +21,22 @@ def word_tokenize(sent):
 
 
 class DataSet(torch.utils.data.Dataset):
-    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config,
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, cat2idx, subcat2idx, selector, config,
+                 label_known=True,
                  col_spliter="\t"):
         self.word2idx = word2idx
         self.uid2idx = uid2idx
+        self.cat2idx = cat2idx
+        self.subcat2idx = subcat2idx
         self.selector = selector
         self.col_spliter = col_spliter
         self.title_size = config['title_size']
+        self.abstract_size = config['abstract_size']
         self.his_size = config['his_size']
         self.npratio = config['npratio']
-        self.nid2idx, self.news_title_index = self.init_news(news_file)
+        self.label_known = label_known
+        self.nid2idx, self.news_title_index, self.news_abstract_index,\
+        self.news_cat_index, self.news_subcat_index = self.init_news(news_file)
         self.histories, self.imprs, self.labels, self.raw_impr_idxs,\
         self.impr_idxs, self.uidxs, self.times, self.pops, self.freshs = \
             self.init_behaviors(behaviors_file)
@@ -51,20 +57,31 @@ class DataSet(torch.utils.data.Dataset):
         """
 
         nid2index = {}
-        news_title = [""]
+        news_title = ['']
+        news_abstract = ['']
+        news_cat = ['']
+        news_subcat = ['']
 
         with open(news_file, 'r') as rd:
             for line in tqdm(rd, desc='Init news'):
-                nid, vert, subvert, title, ab, url, _, _ = line.strip("\n").split(self.col_spliter)
+                nid, cat, subcat, title, abstract,\
+                url, title_ent, abstract_ent = line.strip("\n").split(self.col_spliter)
 
                 if nid in nid2index:
                     continue
 
                 nid2index[nid] = len(nid2index) + 1
                 title = word_tokenize(title)
+                abstract = word_tokenize(abstract)
                 news_title.append(title)
+                news_abstract.append(abstract)
+                news_cat.append(cat)
+                news_subcat.append(subcat)
 
-        news_title_index = np.zeros((len(news_title), self.title_size), dtype="int32")
+        news_title_index = np.zeros((len(news_title), self.title_size), dtype='int32')
+        news_abstract_index = np.zeros((len(news_abstract), self.abstract_size), dtype='int32')
+        news_cat_index = np.zeros(len(news_cat), dtype='int32')
+        news_subcat_index = np.zeros(len(news_subcat), dtype='int32')
 
         for news_index in range(len(news_title)):
             title = news_title[news_index]
@@ -73,7 +90,22 @@ class DataSet(torch.utils.data.Dataset):
                     news_title_index[news_index, word_index] = \
                     self.word2idx[title[word_index].lower()]
 
-        return nid2index, news_title_index
+        for news_index in range(len(news_abstract)):
+            abstract = news_abstract[news_index]
+            for word_index in range(min(self.abstract_size, len(abstract))):
+                if abstract[word_index] in self.word2idx:
+                    news_abstract_index[news_index, word_index] = \
+                    self.word2idx[abstract[word_index].lower()]
+
+        for news_index in range(len(news_cat)):
+            cat = news_cat[news_index]
+            news_cat_index[news_index] = self.cat2idx[cat] if cat in self.cat2idx else 0
+
+        for news_index in range(len(news_subcat)):
+            cat = news_subcat[news_index]
+            news_subcat_index[news_index] = self.subcat2idx[cat] if cat in self.subcat2idx else 0
+
+        return nid2index, news_title_index, news_abstract_index, news_cat_index, news_subcat_index
 
     def init_behaviors(self, behaviors_file):
         """ init behavior logs given behaviors file.
@@ -109,7 +141,10 @@ class DataSet(torch.utils.data.Dataset):
                 history = [0]*(self.his_size-len(history)) + history[:self.his_size]
 
                 impr_news = [self.nid2idx[i.split("-")[0]] for i in impr.split()]
-                label = [int(i.split("-")[1]) for i in impr.split()]
+                if self.label_known:
+                    label = [int(i.split("-")[1]) for i in impr.split()]
+                else:
+                    label = None
                 uindex = self.uid2idx[uid] if uid in self.uid2idx else 0
 
                 pop = [self.nid2idx[i] for i in self.selector.get_pop_recommended(time)]
@@ -131,17 +166,8 @@ class DataSet(torch.utils.data.Dataset):
 
 
 class DataSetTrn(DataSet):
-    nid2idx = None
-    news_title_index = None
-    histories = None
-    imprs = None
-    labels = None
-    impr_idxs = None
-    uidxs = None
-    times = None
-
-    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config):
-        super().__init__(news_file, behaviors_file, word2idx, uid2idx, selector, config)
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, cat2idx, subcat2idx, selector, config):
+        super().__init__(news_file, behaviors_file, word2idx, uid2idx, cat2idx, subcat2idx, selector, config)
 
         # unfolding
         self.histories_unfold = []
@@ -176,42 +202,100 @@ class DataSetTrn(DataSet):
 
     def __getitem__(self, idx):
         negs = sample(self.neg_unfold[idx], self.npratio)
-        his = self.news_title_index[self.histories_unfold[idx]]
-        pos = self.news_title_index[self.pos_unfold[idx]]
-        neg = self.news_title_index[negs]
-        pop = self.news_title_index[self.pop_unfold[idx]]
-        fresh = self.news_title_index[self.fresh_unfold[idx]]
-        return torch.tensor(his).long(), torch.tensor(pos).long(), torch.tensor(neg).long(),\
-               torch.tensor(pop).long(), torch.tensor(fresh).long()
+
+        # title
+        his_title = self.news_title_index[self.histories_unfold[idx]]
+        pos_title = self.news_title_index[self.pos_unfold[idx]]
+        neg_title = self.news_title_index[negs]
+        pop_title = self.news_title_index[self.pop_unfold[idx]]
+        fresh_title = self.news_title_index[self.fresh_unfold[idx]]
+
+        # abstract
+        his_abs = self.news_abstract_index[self.histories_unfold[idx]]
+        pos_abs = self.news_abstract_index[self.pos_unfold[idx]]
+        neg_abs = self.news_abstract_index[negs]
+        pop_abs = self.news_abstract_index[self.pop_unfold[idx]]
+        fresh_abs = self.news_abstract_index[self.fresh_unfold[idx]]
+
+        # category
+        his_cat = self.news_cat_index[self.histories_unfold[idx]]
+        pos_cat = self.news_cat_index[self.pos_unfold[idx]]
+        neg_cat = self.news_cat_index[negs]
+        pop_cat = self.news_cat_index[self.pop_unfold[idx]]
+        fresh_cat = self.news_cat_index[self.fresh_unfold[idx]]
+
+        # sub-category
+        his_subcat = self.news_subcat_index[self.histories_unfold[idx]]
+        pos_subcat = self.news_subcat_index[self.pos_unfold[idx]]
+        neg_subcat = self.news_subcat_index[negs]
+        pop_subcat = self.news_subcat_index[self.pop_unfold[idx]]
+        fresh_subcat = self.news_subcat_index[self.fresh_unfold[idx]]
+
+        return torch.tensor(his_title).long(), torch.tensor(pos_title).long(), torch.tensor(neg_title).long(),\
+               torch.tensor(pop_title).long(), torch.tensor(fresh_title).long(), \
+               torch.tensor(his_abs).long(), torch.tensor(pos_abs).long(), torch.tensor(neg_abs).long(), \
+               torch.tensor(pop_abs).long(), torch.tensor(fresh_abs).long(), \
+               torch.tensor(his_cat).long(), torch.tensor(pos_cat).long(), torch.tensor(neg_cat).long(), \
+               torch.tensor(pop_cat).long(), torch.tensor(fresh_cat).long(), \
+               torch.tensor(his_subcat).long(), torch.tensor(pos_subcat).long(), torch.tensor(neg_subcat).long(), \
+               torch.tensor(pop_subcat).long(), torch.tensor(fresh_subcat).long()
 
     def __len__(self):
         return len(self.uidxs_unfold)
 
 
 class DataSetTest(DataSet):
-    nid2idx = None
-    news_title_index = None
-    histories = None
-    imprs = None
-    labels = None
-    impr_idxs = None
-    uidxs = None
-    times = None
+    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, cat2idx, subcat2idx, selector, config, label_known=True):
+        super().__init__(news_file, behaviors_file, word2idx, uid2idx, cat2idx, subcat2idx, selector, config, label_known)
 
-    def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config, label_known=True):
-        self.label_known = label_known
-        super().__init__(news_file, behaviors_file, word2idx, uid2idx, selector, config)
+        # title
+        self.histories_title = []
+        self.imprs_title = []
+        self.pops_title = []
+        self.freshs_title = []
 
-        self.histories_words = []
-        self.imprs_words = []
-        self.pops_words = []
-        self.freshs_words = []
+        # abstract
+        self.histories_abs = []
+        self.imprs_abs = []
+        self.pops_abs = []
+        self.freshs_abs = []
+
+        # category
+        self.histories_cat = []
+        self.imprs_cat = []
+        self.pops_cat = []
+        self.freshs_cat = []
+
+        # sub-category
+        self.histories_subcat = []
+        self.imprs_subcat = []
+        self.pops_subcat = []
+        self.freshs_subcat = []
 
         for i in range(len(self.histories)):
-            self.histories_words.append(self.news_title_index[self.histories[i]])
-            self.imprs_words.append(self.news_title_index[self.imprs[i]])
-            self.pops_words.append(self.news_title_index[self.pops[i]])
-            self.freshs_words.append(self.news_title_index[self.freshs[i]])
+            # title
+            self.histories_title.append(self.news_title_index[self.histories[i]])
+            self.imprs_title.append(self.news_title_index[self.imprs[i]])
+            self.pops_title.append(self.news_title_index[self.pops[i]])
+            self.freshs_title.append(self.news_title_index[self.freshs[i]])
+
+            # abstract
+            self.histories_abs.append(self.news_abstract_index[self.histories[i]])
+            self.imprs_abs.append(self.news_abstract_index[self.imprs[i]])
+            self.pops_abs.append(self.news_abstract_index[self.pops[i]])
+            self.freshs_abs.append(self.news_abstract_index[self.freshs[i]])
+
+            # category
+            self.histories_cat.append(self.news_cat_index[self.histories[i]])
+            self.imprs_cat.append(self.news_cat_index[self.imprs[i]])
+            self.pops_cat.append(self.news_cat_index[self.pops[i]])
+            self.freshs_cat.append(self.news_cat_index[self.freshs[i]])
+
+            # sub-category
+            self.histories_subcat.append(self.news_subcat_index[self.histories[i]])
+            self.imprs_subcat.append(self.news_subcat_index[self.imprs[i]])
+            self.pops_subcat.append(self.news_subcat_index[self.pops[i]])
+            self.freshs_subcat.append(self.news_subcat_index[self.freshs[i]])
 
     def __getitem__(self, idx):
         pass
