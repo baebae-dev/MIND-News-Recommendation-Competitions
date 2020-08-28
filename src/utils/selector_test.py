@@ -98,7 +98,7 @@ class NewsSelectorTest(object):
         sorted_news_list = sorted(self.pop_hash_recommended[bucket_key].items(),
                                   reverse=True, key=lambda item: item[1])
         news_list = sorted_news_list[0:self.num_pop]
-        res = [ item[0] for item in news_list]
+        res = [item[0] for item in news_list]
         return res
 
     def load_fresh_news_df(self):
@@ -219,7 +219,7 @@ class NewsSelectorTest(object):
     def get_news_list(self, raw_imp, all=False):
         _imps = raw_imp.split(' ')
         if all:
-            _news_list = [_i[:-2] for _i in _imps]
+            _news_list = _imps
         else:
             _news_list = [_i[:-2] for _i in _imps if _i[-1] == '1']
         return _news_list
@@ -249,9 +249,10 @@ class NewsSelectorTest(object):
 
 
 if __name__ == "__main__":
-    nr = NewsSelectorTest(num_pop=10, num_fresh=10, data_type1='large', data_type2='test')
-    ns1 = nr.get_pop_recommended('11/15/2019 8:55:22 AM')
+    nr = NewsSelectorTest(num_pop=20, num_fresh=20, data_type1='large', data_type2='test')
+    ns1 = nr.get_pop_recommended('11/19/2019 11:37:45 AM')
+    print(ns1)
     # ns2 = nr.get_pop_clicked('11/15/2019 8:55:22 AM')
     ns3 = nr.get_fresh('11/15/2019 8:55:22 AM')
-    print(ns1)
+
     print(ns3)
