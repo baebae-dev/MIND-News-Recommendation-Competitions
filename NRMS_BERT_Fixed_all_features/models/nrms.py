@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from models.utils import SelfAttn, LinearAttn, GlobalAttn
+from models.utils import SelfAttn, LinearAttn, GlobalAttn, AdditiveAttention
 
 
 class NRMS(nn.Module):
@@ -23,15 +23,23 @@ class NRMS(nn.Module):
                                         head_num=config['head_num'],
                                         head_dim=config['head_dim'])
         user_encoder = PGTEncoder if config['global'] else NewsSetEncoder
-        self.user_encoder = user_encoder(news_encoder=self.news_encoder,
-                                         drop=config['dropout'],
-                                         news_dim=self.news_dim,
-                                         user_dim=self.user_dim,
-                                         global_dim=self.global_dim,
-                                         key_dim=self.key_dim,
-                                         head_num=config['head_num'],
-                                         head_dim=config['head_dim'])
-
+        if config['global']:
+            self.user_encoder = user_encoder(news_encoder=self.news_encoder,
+                                             drop=config['dropout'],
+                                             news_dim=self.news_dim,
+                                             user_dim=self.user_dim,
+                                             global_dim=self.global_dim,
+                                             key_dim=self.key_dim,
+                                             head_num=config['head_num'],
+                                             head_dim=config['head_dim'])
+        else:
+            self.user_encoder = user_encoder(news_encoder=self.news_encoder,
+                                             drop=config['dropout'],
+                                             news_dim=self.news_dim,
+                                             user_dim=self.user_dim,
+                                             key_dim=self.key_dim,
+                                             head_num=config['head_num'],
+                                             head_dim=config['head_dim'])
     def forward(self, x, source):
         if source == 'history':
             his_out = self.user_encoder(x)
@@ -53,6 +61,16 @@ class Encoder(nn.Module):
                                   input_dim=input_dim)
         self.linear_attn = LinearAttn(output_dim=output_dim, key_dim=key_dim)
 
+        self.dropout2 = nn.Dropout(p=drop)
+
+        self.self_attn2 = SelfAttn(head_num=head_num,
+                                   head_dim=head_dim,
+                                   input_dim=input_dim)
+        self.linear_attn2 = LinearAttn(output_dim=output_dim, key_dim=key_dim)
+
+        self.final_attention = LinearAttn(output_dim=output_dim,
+                                                 key_dim=key_dim)
+
     def forward(self, **kwargs):
         pass
 
@@ -66,12 +84,21 @@ class NewsEncoder(Encoder):
         bert_dim = 1024
         # self.word_emb = word_emb
         self.word_dim = word_dim
-        hid_dim = (bert_dim + self.word_dim) // 2
-        self.t_l1 = nn.Linear(bert_dim, hid_dim)
-        self.t_l2 = nn.Linear(hid_dim, self.word_dim)
+        t_hid_dim = (bert_dim + self.word_dim) // 2
+        self.t_l1 = nn.Linear(bert_dim, t_hid_dim)
+        self.t_l2 = nn.Linear(t_hid_dim, self.word_dim)
 
-        self.c_l = nn.Linear(bert_dim, self.word_dim)
-        self.sc_l = nn.Linear(bert_dim, self.word_dim)
+        c_hid_dim = (bert_dim + news_dim) // 2
+        self.c_l1 = nn.Linear(bert_dim, c_hid_dim)
+        self.c_l2 = nn.Linear(c_hid_dim, news_dim)
+
+        sc_hid_dim = (bert_dim + news_dim) // 2
+        self.sc_l1 = nn.Linear(bert_dim, sc_hid_dim)
+        self.sc_l2 = nn.Linear(sc_hid_dim, news_dim)
+
+        abs_hid_dim = (bert_dim + self.word_dim) // 2
+        self.abs_l1 = nn.Linear(bert_dim, abs_hid_dim)
+        self.abs_l2 = nn.Linear(abs_hid_dim, self.word_dim)
 
         self.relu = nn.ReLU()
 
@@ -79,30 +106,48 @@ class NewsEncoder(Encoder):
 
 
     def forward(self, inputs):
-        t_emb = inputs['title']
-        c_emb = inputs['category']
-        sc_emb = inputs['subcategory']
+        t_emb = inputs['title'].float()
+        c_emb = inputs['category'].float()
+        sc_emb = inputs['subcategory'].float()
+        abs_emb = inputs['abstract'].float()
+
         # process title embedding
-        t_emb = t_emb.float()
         t = self.t_l1(t_emb)
         t = self.relu(t)
         t = self.t_l2(t)
+        t = self.dropout(t)
+        t = self.self_attn(QKV=(t, t, t))
+        t = self.dropout(t)
+        t = self.linear_attn(t)
 
         # process category embedding
-        c = self.c_l(c_emb)
+        c = self.c_l1(c_emb)
+        c = self.relu(c)
+        c = self.c_l2(c)
         c = self.relu(c)
 
+
         # process subcategory embedding
-        sc = self.sc_l(sc_emb)
+        sc = self.sc_l1(sc_emb)
+        sc = self.relu(sc)
+        sc = self.sc_l2(sc)
         sc = self.relu(sc)
 
+        # process abs embedding
+        abs = self.abs_l1(abs_emb)
+        abs = self.relu(abs)
+        abs = self.abs_l2(abs)
+        abs = self.dropout2(abs)
+        abs = self.self_attn2(QKV=(abs, abs, abs))
+        abs = self.dropout2(abs)
+        abs = self.linear_attn2(abs)
 
-        # x = self.word_emb(x)
-        out = self.dropout(x)
-        out = self.self_attn(QKV=(out, out, out))
-        out = self.dropout(out)
-        out = self.linear_attn(out)
-        return out
+        # Final attention using all features
+        stacked_news_vector = torch.stack([c, sc, t, abs], dim=2)
+        news_vector = self.final_attention(stacked_news_vector)
+        # news_vector = self.final_attention(stacked_news_vector)
+
+        return news_vector
 
 
 class NewsSetEncoder(Encoder):
