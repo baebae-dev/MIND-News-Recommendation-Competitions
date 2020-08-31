@@ -1,9 +1,11 @@
 data:
   title_size: 30
+  abstract_size: 30
   his_size: 50
   npratio: 4
-  pop: 7
-  fresh: 1
+  bucket_size: 3
+  pop: 0
+  fresh: 0
   
 info:
   metrics:
@@ -13,16 +15,18 @@ info:
   - ndcg@10
 
 model:
-  global: True
+  global: False
+  aux: True
   attention_hidden_dim: 200
   word_emb_dim: 300
+  cat_emb_dim: 100
   dropout: 0.2
   head_num: 20
   head_dim: 20
 
 train:
-  seed: 42
+  seed: 0
   batch_size: 128
-  epochs: 60
+  epochs: 15
   learning_rate: 0.0001
   weight_decay: 0
