@@ -73,6 +73,7 @@ class DataSet(torch.utils.data.Dataset):
                     news_title_index[news_index, word_index] = \
                     self.word2idx[title[word_index].lower()]
 
+
         return nid2index, news_title_index
 
     def init_behaviors(self, behaviors_file):
@@ -142,6 +143,8 @@ class DataSetTrn(DataSet):
 
     def __init__(self, news_file, behaviors_file, word2idx, uid2idx, selector, config):
         super().__init__(news_file, behaviors_file, word2idx, uid2idx, selector, config)
+        print(self.news_title_index)
+        print(type(self.news_title_index))
 
         # unfolding
         self.histories_unfold = []

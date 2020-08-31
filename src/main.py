@@ -47,7 +47,7 @@ def set_seed(seed):
 
 @click.command()
 @click.option('--data_path', type=str, default='/data/mind')
-@click.option('--data', type=str, default='large')
+@click.option('--data', type=str, default='demo')
 @click.option('--out_path', type=str, default='../out')
 @click.option('--config_path', type=str, default='./config.yaml')
 @click.option('--eval_every', type=int, default=3)
