@@ -48,9 +48,9 @@ def get_title_embedding_bert(df, tokenizer, model, pickle_file, title_size=30, n
             else:
                 z = torch.cat((z, pickle.load(f)))
         os.remove(file_name) # remove used file
-        res = [nid2index, z]
+        res_file = [nid2index, z]
     with open(pickle_file, 'wb') as f:
-        pickle.dump(res, f, protocol=4)
+        pickle.dump(res_file, f, protocol=4)
 
 
 def get_category_embedding_bert(df, tokenizer, model, pickle_file, n=30):
@@ -90,34 +90,24 @@ def get_category_embedding_bert(df, tokenizer, model, pickle_file, n=30):
             else:
                 z = torch.cat((z, pickle.load(f)))
         os.remove(file_name) # remove used file
-        res = z
+        res_file = z
     with open(pickle_file, 'wb') as f:
-        pickle.dump(res, f, protocol=4)
+        pickle.dump(res_file, f, protocol=4)
 
+    '''
+    outputs = model(**tokenized_cats)[0]
+    print(outputs[:,1,:].shape)
 
-def get_category_embedding_bert2(df, tokenizer, model, pickle_file, n=30):
-    dict = {'foodanddrink': 'food'}
-    def processing_cats(cat):
-        if cat in dict:
-            return dict[cat]
-        else:
-            return cat
-
-    cats = df[1].map(lambda x: processing_cats(x)).unique().tolist()
-    cat2idx = {}
-    for i, cat in enumerate(cats):
-        cat2idx[cat] = i
-
-    tokenized_cats = tokenizer(cats, return_tensors='pt', padding=True, truncation=True, max_length=3)
-    cats_embedding = (model(**tokenized_cats)[0][:, 1, :])
-    cats_embedding = cats_embedding.half()
-
-    # cat --> cat2idx[cat] --> cats_embedding[cat2idx[cat]]
-    # res = torch.stack(df[1].map(lambda x: cats_embedding[cat2idx[processing_cats(x)]]).tolist())
-    res = (cat2idx, cats_embedding, df[1].map(lambda x: processing_cats(x)))
+    # def get_cat_embedding(cat):
+    #     res = model(**tokenizer(cat, return_tensors='pt'))[0].squeeze()[1].half()
+    #     return res
+    #
+    # for r in tqdm(range(cats.shape[0])):
+    #     cats[r] = get_cat_embedding(cats[r])
 
     with open(pickle_file, 'wb') as f:
-        pickle.dump(res, f, protocol=4)
+        pickle.dump(cats, f, protocol=4)
+    '''
 
 
 def get_subcategory_embedding_bert(df, tokenizer, model, pickle_file, n=30):
@@ -158,43 +148,10 @@ def get_subcategory_embedding_bert(df, tokenizer, model, pickle_file, n=30):
             else:
                 z = torch.cat((z, pickle.load(f)))
         os.remove(file_name)  # remove used file
-        res = z
+        res_file = z
 
     with open(pickle_file, 'wb') as f:
-        pickle.dump(res, f, protocol=4)
-
-
-def get_subcategory_embedding_bert2(df, tokenizer, model, pickle_file, n=30):
-    subcats = df[2]
-
-    # Read mapping file
-    mapping_df = pd.read_csv('subcategory_mapping.tsv', header=None, sep='\t')
-    _dict = {}
-    for r in range(mapping_df.shape[0]):
-        _dict[mapping_df[0][r]] = mapping_df[1][r]
-
-    # Do mapping
-    subcats = subcats.map(lambda x: _dict[x]).unique().tolist()
-    subcat2idx = {}
-    for i, cat in enumerate(subcats):
-        subcat2idx[cat] = i
-
-    tokenized_subcats = tokenizer(subcats, return_tensors='pt', padding=True, max_length=10)
-    subcat_embedding = (model(**tokenized_subcats)[0])[:,0,:]
-    subcat_embedding = subcat_embedding.half()
-    # print(df[2].shape)
-    # print(model(**tokenized_subcats)[0].shape)
-    # print(subcat_embedding.shape)
-
-    # res = torch.stack(df[2].map(lambda x: subcat_embedding[subcat2idx[_dict[x]]]).tolist())
-
-    res = (subcat2idx, subcat_embedding, df[2].map(lambda x: _dict[x]))
-    # print(res.shape)
-    # print(res.shape)
-    # print(res[0:10])
-
-    with open(pickle_file, 'wb') as f:
-        pickle.dump(res, f, protocol=4)
+        pickle.dump(res_file, f, protocol=4)
 
 def get_abs_embedding_bert(df, tokenizer, model, pickle_file, abs_size=30, n=30):
     abs = df[4]
@@ -236,10 +193,10 @@ def get_abs_embedding_bert(df, tokenizer, model, pickle_file, abs_size=30, n=30)
             else:
                 z = torch.cat((z, pickle.load(f)))
         os.remove(file_name) # remove used file
-        res = z
+        res_file = z
 
     with open(pickle_file, 'wb') as f:
-        pickle.dump(res, f, protocol=4)
+        pickle.dump(res_file, f, protocol=4)
 
 
 if __name__ == "__main__":
@@ -250,8 +207,10 @@ if __name__ == "__main__":
 
     # [demo, large], ['train', 'dev']
     dt1, dt2 = 'demo', 'train'
-    for dt1 in ['demo', 'large']:
-        for dt2 in ['train', 'dev','test']:
+    # for dt1 in ['demo', 'large']:
+    for dt1 in ['demo']:
+        # for dt2 in ['train', 'dev' ,'test']:
+        for dt2 in ['dev', 'train']:
             if dt1 == 'demo' and dt2 == 'test':
                 continue
             news_file = f'/data/mind/MIND{dt1}_{dt2}/news.tsv'
@@ -261,23 +220,23 @@ if __name__ == "__main__":
             title_size = 30
             n=100
             title_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_title_{title_size}.pickle'
-            # get_title_embedding_bert(df, tokenizer, model, title_pickle_file, title_size=title_size, n=100)
+            get_title_embedding_bert(df, tokenizer, model, title_pickle_file, title_size=title_size, n=100)
             print(f"{dt1}-{dt2}/ get title embedding done")
 
             # get category embedding
-            category_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_category2.pickle'
-            get_category_embedding_bert2(df, tokenizer, model, category_pickle_file, n=100)
+            category_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_category.pickle'
+            get_category_embedding_bert(df, tokenizer, model, category_pickle_file, n=100)
             print(f"{dt1}-{dt2}/ get category embedding done")
 
             # get subcategory embedding
-            subcategory_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_subcategory2.pickle'
-            get_subcategory_embedding_bert2(df, tokenizer, model, subcategory_pickle_file, n=100)
+            subcategory_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_subcategory.pickle'
+            get_subcategory_embedding_bert(df, tokenizer, model, subcategory_pickle_file, n=100)
             print(f"{dt1}-{dt2}/ get subcategory embedding done")
 
             # get abstract embedding
             abs_size = 30
             abs_pickle_file = f'/data/mind/MIND{dt1}_{dt2}/BERT/large_bert_abs_{title_size}.pickle'
-            # get_abs_embedding_bert(df, tokenizer, model, abs_pickle_file, abs_size=abs_size, n=100)
+            get_abs_embedding_bert(df, tokenizer, model, abs_pickle_file, abs_size=abs_size, n=100)
             print(f"{dt1}-{dt2}/ get abstract embedding done")
 
             # checks

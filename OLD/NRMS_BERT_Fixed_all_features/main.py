@@ -16,7 +16,7 @@ from apex.parallel import DistributedDataParallel as DDP
 torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
 
-from models.nrms2 import NRMS # two layers
+from models.nrms import NRMS
 from utils.config import prepare_config
 from utils.dataloader import DataSetTrn, DataSetTest
 from utils.evaluation import ndcg_score, mrr_score
@@ -159,7 +159,6 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
     #     vld_set.labels, vld_set.pops_words, vld_set.freshs_words
     vld_loader = DataLoader(vld_set, batch_size=1, num_workers=1, shuffle=False)
     # define models, optimizer, loss
-    # TODO: w2v --> BERT model
     word2vec_emb = np.load(config['wordEmb_file'])
     model = NRMS(config, word2vec_emb).to(DEVICE)
     model = DDP(model, delay_allreduce=True)
@@ -210,7 +209,7 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
         inter_time = time.time()
         epoch_loss = batch_loss/(i+1)
 
-        if epoch<6 or epoch % eval_every != 0:
+        if epoch % eval_every != 0:
             result = f'Epoch {epoch:3d} [{inter_time - start_time:5.2f}Sec]' \
                      f', TrnLoss:{epoch_loss:.4f}'
             print(result)

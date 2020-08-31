@@ -57,30 +57,22 @@ class DataSet(torch.utils.data.Dataset):
         title_embeddings.requires_grad = False
 
         # Get category embeddings
-        cat_pickle_file = '/'.join(tokens[:-1]) + f"/BERT/large_bert_category2.pickle"
+        cat_pickle_file = '/'.join(tokens[:-1]) + f"/BERT/large_bert_category.pickle"
         assert os.path.isfile(cat_pickle_file)
         with open(cat_pickle_file, 'rb') as f:
-            cat2idx, cat_embeddings, cats = pickle.load(f)
+            cat_embeddings = pickle.load(f)
         cat_embeddings.requires_grad = False
-        res = cats.map(lambda x: cat_embeddings[cat2idx[x]]).tolist()
-        news_cat_embeddings = torch.stack(res)
-
-        # news_cat_embeddings.requires_grad = False
         zc = torch.zeros(1, 1024).half()
-        news_cat_embeddings = torch.cat((zc, news_cat_embeddings))
+        cat_embeddings = torch.cat((zc, cat_embeddings))
 
         # Get subcategory embeddings
-        subcat_pickle_file = '/'.join(tokens[:-1]) + f"/BERT/large_bert_subcategory2.pickle"
+        subcat_pickle_file = '/'.join(tokens[:-1]) + f"/BERT/large_bert_subcategory.pickle"
         assert os.path.isfile(subcat_pickle_file)
         with open(subcat_pickle_file, 'rb') as f:
-            subcat2idx, subcat_embeddings, subcats = pickle.load(f)
+            subcat_embeddings = pickle.load(f)
         subcat_embeddings.requires_grad = False
-        res = subcats.map(lambda x: subcat_embeddings[subcat2idx[x]]).tolist()
-        news_subcat_embeddings = torch.stack(res)
-
-
         zsc = torch.zeros(1, 1024).half()
-        news_subcat_embeddings = torch.cat((zsc,news_subcat_embeddings))
+        subcat_embeddings = torch.cat((zsc, subcat_embeddings))
 
         # Get abstract embeddings
         abs_pickle_file = '/'.join(tokens[:-1]) + f"/BERT/large_bert_abs_{self.title_size}.pickle"
@@ -91,7 +83,7 @@ class DataSet(torch.utils.data.Dataset):
         z = torch.zeros(1, 30, 1024).half()
         abs_embeddings = torch.cat((z, abs_embeddings))
 
-        return nid2index, title_embeddings, news_cat_embeddings, news_subcat_embeddings, abs_embeddings
+        return nid2index, title_embeddings, cat_embeddings, subcat_embeddings, abs_embeddings
 
     def init_behaviors(self, behaviors_file):
         """ init behavior logs given behaviors file.

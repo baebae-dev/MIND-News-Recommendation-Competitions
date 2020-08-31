@@ -180,7 +180,7 @@ def get_subcategory_embedding_bert2(df, tokenizer, model, pickle_file, n=30):
         subcat2idx[cat] = i
 
     tokenized_subcats = tokenizer(subcats, return_tensors='pt', padding=True, max_length=10)
-    subcat_embedding = (model(**tokenized_subcats)[0])[:,0,:]
+    subcat_embedding = torch.mean(model(**tokenized_subcats)[0], dim=1)
     subcat_embedding = subcat_embedding.half()
     # print(df[2].shape)
     # print(model(**tokenized_subcats)[0].shape)
@@ -250,8 +250,10 @@ if __name__ == "__main__":
 
     # [demo, large], ['train', 'dev']
     dt1, dt2 = 'demo', 'train'
-    for dt1 in ['demo', 'large']:
-        for dt2 in ['train', 'dev','test']:
+    # for dt1 in ['demo', 'large']:
+    for dt1 in ['demo']:
+        # for dt2 in ['train', 'dev' ,'test']:
+        for dt2 in ['dev', 'train']:
             if dt1 == 'demo' and dt2 == 'test':
                 continue
             news_file = f'/data/mind/MIND{dt1}_{dt2}/news.tsv'
