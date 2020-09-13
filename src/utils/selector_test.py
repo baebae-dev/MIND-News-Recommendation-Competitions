@@ -17,7 +17,7 @@ class NewsSelectorTest(object):
         self.num_pop = num_pop
         self.num_fresh = num_fresh
 
-        # Define file names
+        # Define file names 
         self.data_path = '/data/mind/' + 'MIND' + data_type1 + '_' + data_type2 + '/'
         self.behavior_file = self.data_path + 'behaviors.tsv'
         # self.news_file = self.data_path + 'integrated_news.tsv'  # need combined version

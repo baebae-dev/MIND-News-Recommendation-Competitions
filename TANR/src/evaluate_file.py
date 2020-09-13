@@ -9,6 +9,8 @@ import pandas as pd
 from ast import literal_eval
 import importlib
 import pickle
+import csv
+import zipfile
  
 try:
     Model = getattr(importlib.import_module(f"model.{model_name}"), model_name)
@@ -18,27 +20,6 @@ except (AttributeError, ModuleNotFoundError):
     exit()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-def dcg_score(y_true, y_score, k=10):
-    order = np.argsort(y_score)[::-1]
-    y_true = np.take(y_true, order[:k])
-    gains = 2**y_true - 1
-    discounts = np.log2(np.arange(len(y_true)) + 2)
-    return np.sum(gains / discounts)
-
-
-def ndcg_score(y_true, y_score, k=10):
-    best = dcg_score(y_true, y_true, k)
-    actual = dcg_score(y_true, y_score, k)
-    return actual / best
-
-
-def mrr_score(y_true, y_score):
-    order = np.argsort(y_score)[::-1]
-    y_true = np.take(y_true, order)
-    rr_score = y_true / (np.arange(len(y_true)) + 1)
-    return np.sum(rr_score) / np.sum(y_true)
 
 
 def value2rank(d):
@@ -53,13 +34,13 @@ class NewsDataset(Dataset):
     """
     def __init__(self, news_path):
         super(NewsDataset, self).__init__()
-        self.news_parsed = pd.read_table(news_path,
+        self.news_parsed = pd.read_csv(news_path, sep='\t',
                                          converters={
                                              'title': literal_eval,
                                              'abstract': literal_eval,
                                              'title_entities': literal_eval,
                                              'abstract_entities': literal_eval
-                                         })
+                                         }, quoting=csv.QUOTE_NONE)
 
     def __len__(self):
         return len(self.news_parsed)
@@ -68,7 +49,7 @@ class NewsDataset(Dataset):
         row = self.news_parsed.iloc[idx]
         item = {
             "id": row.id,
-            "category": row.category,
+            "category": row.category, 
             "subcategory": row.subcategory,
             "title": row.title,
             "abstract": row.abstract,
@@ -84,10 +65,11 @@ class UserDataset(Dataset):
     """
     def __init__(self, behaviors_path, user2int_path):
         super(UserDataset, self).__init__()
-        self.behaviors = pd.read_table(behaviors_path,
+        self.behaviors =  pd.read_csv(behaviors_path, sep='\t',
                                        header=None,
                                        usecols=[1, 3],
-                                       names=['user', 'clicked_news'])
+                                       names=['user', 'clicked_news'], quoting=csv.QUOTE_NONE)
+
         self.behaviors.clicked_news.fillna(' ', inplace=True)
         self.behaviors.drop_duplicates(inplace=True)
         user2int = dict(pd.read_table(user2int_path).values.tolist())
@@ -100,8 +82,7 @@ class UserDataset(Dataset):
             else:
                 user_missed += 1
                 self.behaviors.at[row.Index, 'user'] = 0
-        if model_name == 'LSTUR':
-            print(f'User miss rate: {user_missed/user_total:.4f}')
+        
 
     def __len__(self):
         return len(self.behaviors)
@@ -117,8 +98,7 @@ class UserDataset(Dataset):
             row.clicked_news.split()[:config.num_clicked_news_a_user]
         }
         item['clicked_news_length'] = len(item["clicked_news"])
-        repeated_times = config.num_clicked_news_a_user - len(
-            item["clicked_news"])
+        repeated_times = config.num_clicked_news_a_user - len(item["clicked_news"])
         assert repeated_times >= 0
         item["clicked_news"].extend(['PADDED_NEWS'] * repeated_times)
 
@@ -166,10 +146,9 @@ def evaluate(model, directory, generate_txt=False, txt_path=None):
         generate_txt: whether to generate txt file from inference result
         txt_path: file path
     Returns:
-        AUC
-        nMRR
-        nDCG@5
-        nDCG@10
+        scores.txt
+        prediction.txt
+        prediction.zip
     """
     news_dataset = NewsDataset(os.path.join(directory, 'news_parsed.tsv'))
     news_dataloader = DataLoader(news_dataset,
@@ -205,12 +184,15 @@ def evaluate(model, directory, generate_txt=False, txt_path=None):
     with tqdm(total=len(user_dataloader),
               desc="Calculating vectors for users") as pbar:
         for minibatch in user_dataloader:
-            user_strings = minibatch["clicked_news_string"]
+            user_strings = minibatch["clicked_news_string"] 
             if any(user_string not in user2vector
                    for user_string in user_strings):
-                clicked_news_vector = torch.stack([
+
+                clicked_news_vector = torch.stack([ 
                     torch.stack([news2vector[x].to(device) for x in news_list], dim=0)
-                    for news_list in minibatch["clicked_news"]], dim=0).transpose(0, 1)
+                    for news_list in minibatch["clicked_news"]
+                ],  dim=0).transpose(0, 1)
+                
                 user_vector = model.get_user_vector(clicked_news_vector)
                 for user, vector in zip(user_strings, user_vector):
                     if user not in user2vector:
@@ -224,41 +206,26 @@ def evaluate(model, directory, generate_txt=False, txt_path=None):
                                       shuffle=False,
                                       num_workers=config.num_workers)
 
-    aucs = []
-    mrrs = []
-    ndcg5s = []
-    ndcg10s = []
 
     # file generate 
     if generate_txt:
         # scores.txt save
-        scores_dict = dict() 
+        scores_dict = dict()
         # prediction txt saves (rank)
         answer_file = open(txt_path, 'w')
+
     with tqdm(total=len(behaviors_dataloader),
               desc="Calculating probabilities") as pbar:
         for minibatch in behaviors_dataloader:
+
             impression = {
                 news[0].split('-')[0]: model.get_prediction(
-                    news2vector[news[0].split('-')[0]],
+                    news2vector[news[0].split('-')[0]], 
                     user2vector[minibatch['clicked_news_string'][0]]).item()
                 for news in minibatch['impressions']
             }
 
             y_pred_list = list(impression.values())
-            y_list = [
-                int(news[0].split('-')[1]) for news in minibatch['impressions']
-            ]
-
-            auc = roc_auc_score(y_list, y_pred_list)
-            mrr = mrr_score(y_list, y_pred_list)
-            ndcg5 = ndcg_score(y_list, y_pred_list, 5)
-            ndcg10 = ndcg_score(y_list, y_pred_list, 10)
-
-            aucs.append(auc)
-            mrrs.append(mrr)
-            ndcg5s.append(ndcg5)
-            ndcg10s.append(ndcg10)
 
             if generate_txt:
                 # scores saves
@@ -271,11 +238,12 @@ def evaluate(model, directory, generate_txt=False, txt_path=None):
 
     if generate_txt:
         # scores save 
-        with open('../data/dev/scores.pickle', 'wb') as f:
+        with open('../data/test/scores.pickle', 'wb') as f:
             pickle.dump(scores_dict, f, protocol=4)
+        # rank saves
         answer_file.close()
 
-    return np.mean(aucs), np.mean(mrrs), np.mean(ndcg5s), np.mean(ndcg10s)
+    return 
 
 
 if __name__ == '__main__':
@@ -290,18 +258,21 @@ if __name__ == '__main__':
     checkpoint_path = latest_checkpoint(checkpoint_dir)
     if checkpoint_path is None:
         print('No checkpoint file found!')
-        exit()
+        exit()   
     print(f"Load saved parameters in {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
-    auc, mrr, ndcg5, ndcg10 = evaluate(model, '../data/dev', True,
-                                       '../data/dev/prediction.txt')
-    print('save the file', '../data/dev/scores.pickles')
-    print('save the file', '../data/dev/prediction.txt')
-
-    print('-'*50)
-    print(
-        f'AUC: {auc:.4f}\nMRR: {mrr:.4f}\nnDCG@5: {ndcg5:.4f}\nnDCG@10: {ndcg10:.4f}'
-    )
+    evaluate(model, '../data/test', True, '../data/test/prediction.txt')
+    print('save the file', '../data/test/scores.pickles')
+    print('save the file', '../data/test/prediction.txt')
     
+    # zip file save
+    f = zipfile.ZipFile('../data/test/prediction.txt', 'w', zipfile.ZIP_DEFLATED)
+    print('zip the file', '../data/test/prediction.txt')
+    f.write('../data/test/prediction.txt', arcname='prediction.txt')
+    f.close()
+
+    print('zippped file ', '../data/test/prediction.zip')
+
+ 

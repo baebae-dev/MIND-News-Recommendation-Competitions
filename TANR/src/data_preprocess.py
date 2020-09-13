@@ -10,9 +10,7 @@ import csv
 from pathlib import Path
 from shutil import copyfile
 import importlib
-import os
 
-# model config load
 try:
     config = getattr(importlib.import_module('config'), f"{model_name}Config")
 except AttributeError:
@@ -349,12 +347,10 @@ def transform2txt(source, target):
 
 
 if __name__ == '__main__':
-    train_dir = '../data/train'
-    val_dir = '../data/val'
-    test_dir = '../data/test'
-    # Path(val_dir).mkdir(exist_ok=True)
-    if not os.path.exists(val_dir):
-        os.makedirs(val_dir)
+    train_dir = './data/train'
+    val_dir = './data/val'
+    test_dir = './data/test'
+    Path(val_dir).mkdir(exist_ok=True)
 
     print('Process data for training')
 
@@ -378,7 +374,7 @@ if __name__ == '__main__':
 
     print('Generate word embedding')
     generate_word_embedding(
-        f'../data/glove/glove.840B.{config.word_embedding_dim}d.txt',
+        f'./data/glove/glove.840B.{config.word_embedding_dim}d.txt',
         path.join(train_dir, 'pretrained_word_embedding.npy'),
         path.join(train_dir, 'word2int.tsv'))
 
@@ -390,9 +386,9 @@ if __name__ == '__main__':
 
     print('\nProcess data for test')
 
-    # print('Transform test data')
-    # transform2txt(path.join(test_dir, 'behaviors.tsv'),
-    #               path.join(test_dir, 'truth.txt'))
+    print('Transform test data')
+    transform2txt(path.join(test_dir, 'behaviors.tsv'),
+                  path.join(test_dir, 'truth.txt'))
 
     print('Parse news')
     parse_news(path.join(test_dir, 'news.tsv'),

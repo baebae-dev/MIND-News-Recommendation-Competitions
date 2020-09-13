@@ -23,6 +23,11 @@ class NewsEncoder(torch.nn.Module):
             config.num_filters,
             (config.window_size, config.word_embedding_dim),
             padding=(int((config.window_size - 1) / 2), 0))
+        self.abstract_CNN = nn.Conv2d(
+            1,
+            config.num_filters,
+            (config.window_size, config.word_embedding_dim),
+            padding=(int((config.window_size - 1) / 2), 0))
         self.title_attention = AdditiveAttention(config.query_vector_dim,
                                                  config.num_filters)
 
@@ -49,7 +54,6 @@ class NewsEncoder(torch.nn.Module):
                                            p=self.config.dropout_probability,
                                            training=self.training)
         # batch_size, num_filters
-        weighted_title_vector = self.title_attention(
+        news_vector = self.title_attention(
             activated_title_vector.transpose(1, 2))
-
-        return weighted_title_vector
+        return news_vector

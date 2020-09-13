@@ -18,7 +18,7 @@ def ndcg_score(y_true, y_score, k=10):
     best = dcg_score(y_true, y_true, k)
     actual = dcg_score(y_true, y_score, k)
     return actual / best
-
+  
 
 def mrr_score(y_true, y_score):
     order = np.argsort(y_score)[::-1]
@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
     if not os.path.isdir(submit_dir):
         print("%s doesn't exist" % submit_dir)
-
+ 
     if os.path.isdir(submit_dir) and os.path.isdir(truth_dir):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
