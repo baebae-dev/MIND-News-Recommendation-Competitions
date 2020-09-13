@@ -1,5 +1,5 @@
 ######################################################################################################
-# TRANSMETER
+# mind2020
 # Authors: Hyunsik Jeon(jeon185@snu.ac.kr), SeungCheol Park(ant6si@snu.ac.kr),
 #          Yuna Bae(yunabae482@gmail.com), U kang(ukang@snu.ac.kr)
 # File: TANR/src/data_preprocess.py
