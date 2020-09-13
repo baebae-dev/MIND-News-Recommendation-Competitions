@@ -1,3 +1,13 @@
+######################################################################################################
+# Mind 2020
+# Authors: Hyunsik Jeon(jeon185@snu.ac.kr), SeungCheol Park(ant6si@snu.ac.kr),
+#          Yuna Bae(yunabae482@gmail.com), U kang(ukang@snu.ac.kr)
+# File: src/NRMS_BERT/main.py
+# - The main file which experiment file calls.
+#
+# Version: 1.0
+#######################################################################################################
+
 import sys, os
 sys.path.append('./')
 
@@ -13,12 +23,11 @@ from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
-from apex.parallel import DistributedDataParallel as DDP
+from apex.parallel import DistributedDataParallel as DDP # apex for multi-gpu training
 
 torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
-
-from models.nrms2 import NRMS # two layers
+from models.nrms import NRMS # two layers
 from utils.config import prepare_config
 from utils.dataloader import DataSetTrn, DataSetTest
 from utils.evaluation import ndcg_score, mrr_score
@@ -27,6 +36,11 @@ from utils.selector import NewsSelector
 
 
 def set_data_paths(path):
+    """
+    set path for data
+    :param path
+    :return: paths
+    """
     paths = {'behaviors': os.path.join(path, 'behaviors.tsv'),
              'news': os.path.join(path, 'news.tsv'),
              'entity': os.path.join(path, 'entity_embedding.vec'),
@@ -35,6 +49,11 @@ def set_data_paths(path):
 
 
 def set_util_paths(path):
+    """
+    set path for util files
+    :param path
+    :return: paths
+    """
     paths = {'embedding': os.path.join(path, 'embedding.npy'),
              'uid2index': os.path.join(path, 'uid2index.pkl'),
              'word_dict': os.path.join(path, 'word_dict.pkl')}
@@ -42,11 +61,20 @@ def set_util_paths(path):
 
 
 def load_dict(file_path):
+    """
+    load dictionary file
+    :param file_path:
+    :return: loaded dictionary file included in the pickle file
+    """
     with open(file_path, "rb") as f:
         return pickle.load(f)
 
 
 def set_seed(seed):
+    """
+    set random seed for numpy and pytorch
+    :param seed:
+    """
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -119,10 +147,7 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
     word2idx = load_dict(config['wordDict_file'])
     uid2idx = load_dict(config['userDict_file'])
 
-    # load datasets and define dataloaders
-    # if os.path.exists(trn_pickle_path):
-    #     with open(trn_pickle_path, 'rb') as f:
-    #         trn_set = pickle.load(f)
+
     if False:
         pass
     else:
@@ -132,12 +157,7 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
         trn_set = DataSetTrn(trn_paths['news'], trn_paths['behaviors'],
                              word2idx=word2idx, uid2idx=uid2idx,
                              selector=trn_selector, config=config)
-        # with open(trn_pickle_path, 'wb') as f:
-        #     pickle.dump(trn_set, f, protocol=4)
 
-    # if os.path.exists(vld_pickle_path):
-    #     with open(vld_pickle_path, 'rb') as f:
-    #         vld_set = pickle.load(f)
     if False:
         pass
     else:
@@ -149,19 +169,14 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
                               selector=vld_selector, config=config,
                               label_known=True)
 
-        # with open(vld_pickle_path, 'wb') as f:
-        #     pickle.dump(vld_set, f, protocol=4)
 
     trn_sampler = DistributedSampler(trn_set)
     trn_loader = DataLoader(trn_set, batch_size=config['batch_size'],
                             num_workers=8, sampler=trn_sampler)
 
-    # vld_impr_idx, vld_his, vld_impr, vld_label, vld_pop, vld_fresh =\
-    #     vld_set.raw_impr_idxs, vld_set.histories_words, vld_set.imprs_words,\
-    #     vld_set.labels, vld_set.pops_words, vld_set.freshs_words
     vld_loader = DataLoader(vld_set, batch_size=1, num_workers=1, shuffle=False)
+
     # define models, optimizer, loss
-    # TODO: w2v --> BERT model
     word2vec_emb = np.load(config['wordEmb_file'])
     model = NRMS(config, word2vec_emb).to(DEVICE)
     model = DDP(model, delay_allreduce=True)
@@ -172,15 +187,11 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
 
     # train and evaluate
     for epoch in range(1, epochs+1):
-        # Test model saving 
-        # model_pth = os.path.join(out_path, f'nrms-bert-{epoch}.pth')
-        # torch.save(model.state_dict(), model_pth)
 
         start_time = time.time()
         batch_loss = 0.
-        '''
-        training
-        '''
+
+        # Training
         for i, (trn_his, trn_pos, trn_neg, trn_pop, trn_fresh) \
                 in tqdm(enumerate(trn_loader), desc='Training', total=len(trn_loader)):
             # ready for training
@@ -228,15 +239,12 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
             print(result)
             continue
 
-        '''
-        evaluation
-        '''
+        # Start evaluation
         model.eval()
         if local_rank==0:
             model_pth = os.path.join(out_path, f'nrms-bert-{epoch}.pth')
             torch.save(model.state_dict(), model_pth)
             with open(os.path.join(out_path, f'prediction-{epoch}.txt'), 'w') as f:
-                # for j in tqdm(range(len(vld_impr)), desc='Evaluation', total=len(vld_impr)):
                 for j, (impr_idx_j, vld_his_j, vld_cand_j, vld_label_j, vld_pop_j, vld_fresh_j) \
                     in tqdm(enumerate(vld_loader), desc='Evaluation', total=len(vld_loader)):
 
@@ -269,7 +277,6 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
                     ranks_str = ','.join([str(r) for r in list(ranks)])
                     f.write(f'{impr_idx_j.item()} [{ranks_str}]\n')
                     vld_gt_j = np.array(vld_label_j)
-                    # vld_gt_j = np.array(vld_label[j])
 
                     for metric, _ in metrics.items():
                         if metric == 'auc':
@@ -284,7 +291,7 @@ def main(hyp, lr, dropout, word_dim, exp_num, gpus, local_rank, data_path, data,
                             metrics[metric] += score
 
             for metric, _ in metrics.items():
-                metrics[metric] /= len(vld_loader) # len(vld_impr)
+                metrics[metric] /= len(vld_loader)
 
             end_time = time.time()
 
