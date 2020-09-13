@@ -1,12 +1,3 @@
-######################################################################################################
-# TRANSMETER
-# Authors: Hyunsik Jeon(jeon185@snu.ac.kr), SeungCheol Park(ant6si@snu.ac.kr),
-#          Yuna Bae(yunabae482@gmail.com), U kang(ukang@snu.ac.kr)
-# File: TANR/README.md
-# - readme for run model TANR
-#
-# Version: 1.0
-#######################################################################################################
 
 # News Recommendation
 
@@ -45,10 +36,13 @@ python3 src/data_preprocess.py
 # Remember you shoud modify `num_*` in `src/config.py` by the output of `src/data_preprocess.py`
 
 # Train model
+# Train and save checkpoint into `checkpoint/{model_name}/` directory
 cd src
 python3 train.py
 
 # evaluate for dev set
+# Load latest checkpoint and evaluate on the test set
+# This will also generate prediction file `data/test/prediction.txt`
 python3 evaluate.py
 
 # make submission file for test set
@@ -58,22 +52,4 @@ python3 evaluate_file.py
 
 Modify `src/config.py` to select target model. The configuration file is organized into general part (which is applied to all models) and model-specific part (that some models not have).
 
-```bash
-vim src/config.py
-```
-
-Run.
-
-```bash
-# Train and save checkpoint into `checkpoint/{model_name}/` directory
-python3 src/train.py
-# Load latest checkpoint and evaluate on the test set
-# This will also generate prediction file `data/test/prediction.txt`
-python3 src/evaluate.py
-
-# or
-
-chmod +x run.sh
-./run.sh
-```
 
