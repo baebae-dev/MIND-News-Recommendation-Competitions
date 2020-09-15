@@ -11,7 +11,7 @@
 import torch
 import torch.nn as nn
 
-from NRMS_NAML.models.utils import SelfAttn, LinearAttn, GlobalAttn, Norm
+from NRMS_NAML.models.utils import SelfAttn, LinearAttn, GlobalAttn
 
 
 class NRMS(nn.Module):
