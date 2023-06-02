@@ -6,7 +6,7 @@
 [최종 paper](https://msnews.github.io/assets/doc/2.pdf)      
 
 - 최종 모델
-  NRMS+NAML+BERT (NNB)
+  [NRMS](https://wuch15.github.io/paper/EMNLP2019-NRMS.pdf)+[NAML](https://arxiv.org/pdf/1907.05576.pdf)+BERT (NNB)
 
 ## 학습하기
 
